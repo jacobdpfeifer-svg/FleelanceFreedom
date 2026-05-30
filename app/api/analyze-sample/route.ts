@@ -1,0 +1,54 @@
+import { NextRequest, NextResponse } from "next/server";
+import { createServerClient, createServiceClient } from "@/lib/supabase/server";
+import { analyzeSample } from "@/lib/analyzeSample";
+import { checkAndApplyQuota, incrementMessageCount } from "@/lib/messageQuota";
+import { MIN_SAMPLE_CHARS } from "@/lib/sampleConstants";
+
+export const runtime = "nodejs";
+
+export async function POST(req: NextRequest) {
+  const supabase = createServerClient();
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
+  if (!session) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const serviceClient = createServiceClient();
+
+  const quotaResult = await checkAndApplyQuota(
+    supabase,
+    serviceClient,
+    session.user.id
+  );
+  if ("response" in quotaResult) {
+    return quotaResult.response;
+  }
+
+  let text: string;
+  try {
+    const body = (await req.json()) as { text?: string };
+    text = (body.text ?? "").trim();
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+  }
+
+  if (!text || text.length < MIN_SAMPLE_CHARS) {
+    return NextResponse.json(
+      { error: `Paste at least ${MIN_SAMPLE_CHARS} characters of copy to analyze.` },
+      { status: 422 }
+    );
+  }
+
+  try {
+    const result = await analyzeSample(text);
+    await incrementMessageCount(serviceClient, session.user.id);
+    return NextResponse.json(result);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Analysis failed";
+    console.error("analyze-sample error:", message);
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}
