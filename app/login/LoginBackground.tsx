@@ -2,36 +2,36 @@
 
 import dynamic from "next/dynamic";
 import { useEffect, useState } from "react";
-import "@/components/LineWaves.css";
+import "@/components/Plasma.css";
 
-const LineWaves = dynamic(() => import("@/components/LineWaves"), { ssr: false });
+const Plasma = dynamic(() => import("@/components/Plasma"), { ssr: false });
 
 export default function LoginBackground() {
-  const [showWaves, setShowWaves] = useState(false);
+  const [showPlasma, setShowPlasma] = useState(false);
 
   useEffect(() => {
     const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
     if (!reducedMotion.matches) {
-      setShowWaves(true);
+      setShowPlasma(true);
     }
 
     function onChange(e: MediaQueryListEvent) {
-      setShowWaves(!e.matches);
+      setShowPlasma(!e.matches);
     }
 
     reducedMotion.addEventListener("change", onChange);
     return () => reducedMotion.removeEventListener("change", onChange);
   }, []);
 
-  if (showWaves) {
+  if (showPlasma) {
     return (
-      <LineWaves
-        speed={0.25}
-        brightness={0.22}
-        color1="#5D5949"
-        color2="#C7C1B4"
-        color3="#E5E1CD"
-        enableMouseInteraction={false}
+      <Plasma
+        color="#C7C1B4"
+        speed={0.6}
+        direction="forward"
+        scale={1.1}
+        opacity={0.22}
+        mouseInteractive={false}
       />
     );
   }
