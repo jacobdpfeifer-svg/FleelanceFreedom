@@ -29,5 +29,9 @@ export function getPriceId(plan: "pro" | "agency"): string | undefined {
 }
 
 export function getAppUrl(): string {
-  return process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+  const url = process.env.NEXT_PUBLIC_APP_URL;
+  if (url) return url;
+  if (process.env.NODE_ENV === "production")
+    throw new Error("NEXT_PUBLIC_APP_URL is not set.");
+  return "http://localhost:3000";
 }

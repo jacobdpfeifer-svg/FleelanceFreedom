@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { saveMemory } from "@/app/clients/[id]/actions";
+import { Button } from "@/components/ui";
+import { saveMemory } from "@/app/clients/actions";
 import {
   applyAnswer,
   parseExtractions,
@@ -65,8 +66,8 @@ function MessageBubble({ message }: { message: ChatMessage }) {
           {message.extractions!.map((ex, i) => (
             <div
               key={i}
-              className="ob-extraction"
-              style={{ animationDelay: `${i * 90}ms` }}
+              className="ob-extraction animate-stampIn opacity-0 animation-fill-forwards"
+              style={{ animationDelay: `${i * 70}ms` }}
             >
               <span className="ob-ex-check">✓</span>
               <span className="ob-ex-label">{ex.label}:</span>
@@ -74,7 +75,12 @@ function MessageBubble({ message }: { message: ChatMessage }) {
             </div>
           ))}
           {message.capability && (
-            <div className="ob-capability">{message.capability}</div>
+            <div
+              className="ob-capability animate-stampIn opacity-0 animation-fill-forwards"
+              style={{ animationDelay: `${message.extractions!.length * 70}ms` }}
+            >
+              {message.capability}
+            </div>
           )}
         </div>
       )}
@@ -170,7 +176,11 @@ function ProfilePanel({
             const status =
               i < currentStep ? "done" : i === currentStep ? "active" : "locked";
             return (
-              <div key={s.id} className={`ob-cap-row ob-cap-row--${status}`}>
+              <div
+                key={s.id}
+                className={`ob-cap-row ob-cap-row--${status} animate-stampIn opacity-0 animation-fill-forwards`}
+                style={{ animationDelay: `${i * 70}ms` }}
+              >
                 <span className="ob-cap-icon">{i < currentStep ? "✓" : "·"}</span>
                 <span className="ob-cap-text">{s.capability}</span>
               </div>
@@ -471,13 +481,13 @@ export default function ClientOnboarding({
             {saveError && (
               <div className="ob-error">
                 {saveError}
-                <button
-                  type="button"
-                  className="ob-retry"
+                <Button
+                  variant="ghost"
                   onClick={() => saveAndReveal(profile)}
+                  className="text-xs"
                 >
                   Retry
-                </button>
+                </Button>
               </div>
             )}
 
@@ -487,7 +497,7 @@ export default function ClientOnboarding({
           {!showReveal && (
             <div className="ob-input-area">
               <p className="ob-hint">{step.hint}</p>
-              <div className="ob-input-row">
+              <div className={`ob-input-row ${isTyping ? "scan-active" : ""}`}>
                 <textarea
                   ref={inputRef}
                   className="ob-textarea"
@@ -499,12 +509,12 @@ export default function ClientOnboarding({
                   disabled={isTyping}
                   aria-label="Your answer"
                 />
-                <button
-                  type="button"
-                  className="ob-send"
+                <Button
+                  variant="primary"
                   onClick={handleSend}
                   disabled={!input.trim() || isTyping}
                   aria-label="Send answer"
+                  className="flex-shrink-0 h-9 w-9 !p-0"
                 >
                   <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
                     <path
@@ -514,7 +524,7 @@ export default function ClientOnboarding({
                       strokeLinejoin="round"
                     />
                   </svg>
-                </button>
+                </Button>
               </div>
               <p className="ob-meta">Enter to send · Shift+Enter for new line</p>
             </div>

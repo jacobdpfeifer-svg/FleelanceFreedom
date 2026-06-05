@@ -1,0 +1,3231 @@
+import { redirect } from "next/navigation";
+import { createServerClient } from "@/lib/supabase/server";
+
+export default async function RootPage() {
+  const supabase = createServerClient();
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
+  if (session) {
+    redirect("/dashboard");
+  } else {
+    redirect("/login");
+  }
+}
+import type { Metadata } from "next";
+import "./globals.css";
+
+export const metadata: Metadata = {
+  title: "Freelance Freedom",
+  description: "Remember each client's voice. On-brand copy, every time.",
+};
+
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return (
+    <html lang="en">
+      <body className="min-h-screen">{children}</body>
+    </html>
+  );
+}
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    -webkit-font-smoothing: antialiased;
+  }
+
+  body {
+    @apply bg-warm-ivory text-warm-olive;
+  }
+}
+
+@layer utilities {
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: theme(colors.warm.taupe) transparent;
+  }
+}
+"use client";
+
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { signIn, signUp } from "./actions";
+import LoginBackground from "./LoginBackground";
+
+const inputClass =
+  "w-full bg-warm-ivory border border-warm-taupe rounded-lg px-3 py-2.5 text-sm text-warm-olive placeholder-warm-taupe focus:outline-none focus:border-warm-olive transition-colors";
+
+function friendlyAuthError(message: string): string {
+  if (/only request this after/i.test(message)) {
+    return "Too many sign-up attempts in a short time. Wait about a minute, or sign in if you already created an account.";
+  }
+  if (/email not confirmed/i.test(message)) {
+    return "Please confirm your email first, then sign in. Or disable email confirmation in Supabase for local development.";
+  }
+  return message;
+}
+
+export default function LoginPage() {
+  const router = useRouter();
+  const [mode, setMode] = useState<"sign_in" | "sign_up">("sign_in");
+  const [error, setError] = useState<string | null>(null);
+  const [isPending, setIsPending] = useState(false);
+
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (isPending) return;
+
+    setError(null);
+    setIsPending(true);
+
+    const fd = new FormData(e.currentTarget);
+    const action = mode === "sign_in" ? signIn : signUp;
+
+    try {
+      const result = await action(fd);
+      if (result?.error) {
+        setError(friendlyAuthError(result.error));
+        return;
+      }
+      if (result?.redirectTo) {
+        router.push(result.redirectTo);
+        router.refresh();
+      }
+    } finally {
+      setIsPending(false);
+    }
+  }
+
+  return (
+    <div className="relative min-h-screen flex items-center justify-center px-4">
+      <LoginBackground />
+      <div className="relative z-10 w-full max-w-sm">
+        <div className="mb-8 text-center">
+          <h1 className="text-2xl font-semibold text-warm-olive">Freelance Freedom</h1>
+        </div>
+
+        <div className="bg-white/85 backdrop-blur-sm border border-warm-taupe rounded-2xl p-6 shadow-sm">
+          <div className="flex rounded-lg bg-warm-cream p-1 mb-6">
+            {(["sign_in", "sign_up"] as const).map((m) => (
+              <button
+                key={m}
+                type="button"
+                onClick={() => {
+                  setMode(m);
+                  setError(null);
+                }}
+                className={`flex-1 py-1.5 text-sm rounded-md font-medium transition-colors ${
+                  mode === m
+                    ? "bg-warm-olive text-warm-ivory"
+                    : "text-warm-olive/60 hover:text-warm-olive"
+                }`}
+              >
+                {m === "sign_in" ? "Sign in" : "Sign up"}
+              </button>
+            ))}
+          </div>
+
+          <form onSubmit={handleSubmit} className="space-y-4">
+            {mode === "sign_up" && (
+              <>
+                <div>
+                  <label className="block text-xs text-warm-olive/70 mb-1.5">
+                    First name
+                  </label>
+                  <input
+                    name="first_name"
+                    type="text"
+                    required
+                    autoComplete="given-name"
+                    disabled={isPending}
+                    className={inputClass}
+                    placeholder="Jane"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-warm-olive/70 mb-1.5">
+                    Last name
+                  </label>
+                  <input
+                    name="last_name"
+                    type="text"
+                    required
+                    autoComplete="family-name"
+                    disabled={isPending}
+                    className={inputClass}
+                    placeholder="Smith"
+                  />
+                </div>
+              </>
+            )}
+
+            <div>
+              <label className="block text-xs text-warm-olive/70 mb-1.5">Email</label>
+              <input
+                name="email"
+                type="email"
+                required
+                autoComplete="email"
+                disabled={isPending}
+                className={inputClass}
+                placeholder="you@example.com"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-warm-olive/70 mb-1.5">Password</label>
+              <input
+                name="password"
+                type="password"
+                required
+                autoComplete={mode === "sign_in" ? "current-password" : "new-password"}
+                disabled={isPending}
+                className={inputClass}
+                placeholder="••••••••"
+              />
+            </div>
+
+            {error && (
+              <p className="text-red-800 text-xs bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+                {error}
+              </p>
+            )}
+
+            <button
+              type="submit"
+              disabled={isPending}
+              className="w-full bg-warm-olive hover:bg-brand-dark disabled:opacity-50 text-warm-ivory font-medium py-2.5 rounded-lg text-sm transition-colors"
+            >
+              {isPending ? "…" : mode === "sign_in" ? "Sign in" : "Create account"}
+            </button>
+          </form>
+        </div>
+      </div>
+    </div>
+  );
+}
+"use client";
+
+import dynamic from "next/dynamic";
+import { useEffect, useState } from "react";
+import "@/components/Plasma.css";
+
+const Plasma = dynamic(() => import("@/components/Plasma"), { ssr: false });
+
+export default function LoginBackground() {
+  const [showPlasma, setShowPlasma] = useState(false);
+
+  useEffect(() => {
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+    if (!reducedMotion.matches) {
+      setShowPlasma(true);
+    }
+
+    function onChange(e: MediaQueryListEvent) {
+      setShowPlasma(!e.matches);
+    }
+
+    reducedMotion.addEventListener("change", onChange);
+    return () => reducedMotion.removeEventListener("change", onChange);
+  }, []);
+
+  if (showPlasma) {
+    return (
+      <Plasma
+        color="#C7C1B4"
+        speed={0.6}
+        direction="forward"
+        scale={1.1}
+        opacity={0.22}
+        mouseInteractive={false}
+      />
+    );
+  }
+
+  return <div className="login-bg-fallback" aria-hidden="true" />;
+}
+import { redirect } from "next/navigation";
+import Link from "next/link";
+import { createServerClient } from "@/lib/supabase/server";
+import { createNewClient, signOut } from "./actions";
+import type { Client } from "@/lib/types";
+
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: { error?: string; checkout?: string };
+}) {
+  const supabase = createServerClient();
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
+  if (!session) redirect("/login");
+
+  const { data: clients, error } = await supabase
+    .from("clients")
+    .select("*")
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    console.error("clients fetch error:", error.message);
+  }
+
+  const { data: user } = await supabase
+    .from("users")
+    .select("plan")
+    .eq("id", session.user.id)
+    .single();
+
+  const plan = user?.plan ?? "free";
+  const clientList: Client[] = clients ?? [];
+  const atFreeLimit = plan === "free" && clientList.length >= 1;
+
+  return (
+    <div className="min-h-screen bg-warm-ivory">
+      <nav className="border-b border-warm-taupe px-6 py-4 flex items-center justify-between bg-white/60 backdrop-blur-sm">
+        <div className="flex items-center gap-2">
+          <div className="w-7 h-7 rounded-lg bg-warm-olive flex items-center justify-center text-warm-ivory font-bold text-xs">
+            FF
+          </div>
+          <span className="font-semibold text-warm-olive">Freelance Freedom</span>
+        </div>
+        <div className="flex items-center gap-4">
+          <span className="text-xs text-warm-olive/60 capitalize">{plan} plan</span>
+          <form action={signOut}>
+            <button
+              type="submit"
+              className="text-sm text-warm-olive/60 hover:text-warm-olive transition-colors"
+            >
+              Sign out
+            </button>
+          </form>
+        </div>
+      </nav>
+
+      <main className="max-w-5xl mx-auto px-6 py-10">
+        {searchParams.checkout === "success" && (
+          <div className="mb-6 bg-green-50 border border-green-200 text-green-800 text-sm px-4 py-3 rounded-xl">
+            Subscription active — your plan has been upgraded.
+          </div>
+        )}
+
+        {searchParams.error && (
+          <div className="mb-6 bg-red-50 border border-red-200 text-red-800 text-sm px-4 py-3 rounded-xl">
+            {searchParams.error}
+          </div>
+        )}
+
+        <div className="flex items-center justify-between mb-8">
+          <div>
+            <h1 className="text-2xl font-bold text-warm-olive">Clients</h1>
+            <p className="text-warm-olive/60 text-sm mt-1">
+              {clientList.length} client{clientList.length !== 1 ? "s" : ""}
+            </p>
+          </div>
+
+          {atFreeLimit ? (
+            <Link
+              href="/pricing"
+              className="flex items-center gap-2 bg-amber-500/10 border border-amber-500/30 text-amber-700 hover:bg-amber-500/20 px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+            >
+              Upgrade to add more clients
+            </Link>
+          ) : (
+            <form action={createNewClient}>
+              <button
+                type="submit"
+                className="flex items-center gap-2 bg-warm-olive hover:bg-brand-dark text-warm-ivory px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+              >
+                <span className="text-lg leading-none">+</span>
+                New client
+              </button>
+            </form>
+          )}
+        </div>
+
+        {atFreeLimit && (
+          <div className="mb-6 bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-center justify-between">
+            <div>
+              <p className="text-amber-900 font-medium text-sm">
+                Free plan: 1 client limit reached
+              </p>
+              <p className="text-amber-800/70 text-xs mt-0.5">
+                Upgrade to Pro for unlimited clients, messages, and decision history.
+              </p>
+            </div>
+            <Link
+              href="/pricing"
+              className="bg-amber-600 hover:bg-amber-500 text-warm-ivory px-4 py-2 rounded-lg text-sm font-semibold transition-colors whitespace-nowrap"
+            >
+              Upgrade — $9/mo
+            </Link>
+          </div>
+        )}
+
+        {clientList.length === 0 ? (
+          <div className="text-center py-24 border border-dashed border-warm-taupe rounded-2xl bg-white/50">
+            <p className="text-warm-olive/50 mb-4">No clients yet.</p>
+            <form action={createNewClient}>
+              <button
+                type="submit"
+                className="bg-warm-olive hover:bg-brand-dark text-warm-ivory px-5 py-2.5 rounded-lg text-sm font-medium transition-colors"
+              >
+                Create your first client
+              </button>
+            </form>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {clientList.map((client) => (
+              <div
+                key={client.id}
+                className="group relative bg-white border border-warm-taupe hover:border-warm-olive/40 rounded-xl p-5 transition-colors shadow-sm"
+              >
+                <Link
+                  href={`/clients/${client.id}`}
+                  className="absolute inset-0 z-0 rounded-xl"
+                  aria-label={`Open ${client.name}`}
+                />
+                <div className="relative z-10 pointer-events-none">
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="w-10 h-10 rounded-full bg-warm-cream flex items-center justify-center text-warm-olive font-semibold text-sm">
+                      {client.name.slice(0, 2).toUpperCase()}
+                    </div>
+                    <span className="text-xs text-warm-olive/50">
+                      {new Date(client.created_at).toLocaleDateString()}
+                    </span>
+                  </div>
+                  <h2 className="font-semibold text-warm-olive group-hover:text-brand-dark transition-colors">
+                    {client.name}
+                  </h2>
+                  {client.industry && (
+                    <p className="text-warm-olive/60 text-sm mt-1">{client.industry}</p>
+                  )}
+                  <div className="flex gap-2 mt-4">
+                    <span className="text-xs text-warm-olive/50 bg-warm-cream px-2 py-1 rounded">
+                      Memory
+                    </span>
+                    <Link
+                      href={`/clients/${client.id}/chat`}
+                      className="pointer-events-auto text-xs text-warm-olive bg-warm-cream hover:bg-warm-taupe/40 px-2 py-1 rounded transition-colors"
+                    >
+                      Chat →
+                    </Link>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </main>
+    </div>
+  );
+}
+import { redirect } from "next/navigation";
+import Link from "next/link";
+import { createServerClient } from "@/lib/supabase/server";
+import PricingCheckout from "./PricingCheckout";
+import type { Plan } from "@/lib/types";
+
+interface Props {
+  searchParams: { checkout?: string };
+}
+
+const TIERS = [
+  {
+    id: "free" as const,
+    name: "Free",
+    price: "$0",
+    period: "forever",
+    description: "Try Freelance Freedom with one client.",
+    features: [
+      "1 client",
+      "50 messages / month",
+      "Memory editor & chat",
+      "Onboarding voice capture",
+    ],
+  },
+  {
+    id: "pro" as const,
+    name: "Pro",
+    price: "$9",
+    period: "/ month",
+    description: "For freelancers juggling multiple clients.",
+    features: [
+      "Unlimited clients",
+      "Unlimited messages",
+      "Full decision history",
+      "PDF memory export",
+    ],
+    highlighted: true,
+  },
+  {
+    id: "agency" as const,
+    name: "Agency",
+    price: "$29",
+    period: "/ month",
+    description: "For teams managing many client voices.",
+    features: [
+      "Everything in Pro",
+      "Priority support",
+      "Team workflows (coming soon)",
+      "Shared client libraries (coming soon)",
+    ],
+  },
+];
+
+export default async function PricingPage({ searchParams }: Props) {
+  const supabase = createServerClient();
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
+  if (!session) redirect("/login");
+
+  const { data: user } = await supabase
+    .from("users")
+    .select("plan")
+    .eq("id", session.user.id)
+    .single();
+
+  const currentPlan = (user?.plan as Plan) ?? "free";
+
+  return (
+    <div className="min-h-screen bg-warm-ivory">
+      <nav className="border-b border-warm-taupe px-6 py-4 flex items-center gap-3 bg-white/60 backdrop-blur-sm">
+        <Link
+          href="/dashboard"
+          className="text-warm-olive/60 hover:text-warm-olive text-sm transition-colors"
+        >
+          ← Dashboard
+        </Link>
+      </nav>
+
+      <main className="max-w-5xl mx-auto px-6 py-12">
+        <div className="text-center mb-10">
+          <h1 className="text-3xl font-bold text-warm-olive">Pricing</h1>
+          <p className="text-warm-olive/60 text-sm mt-2 max-w-md mx-auto">
+            Store each client&apos;s voice once. Generate on-brand copy without
+            re-explaining context every session.
+          </p>
+        </div>
+
+        {searchParams.checkout === "canceled" && (
+          <div className="mb-6 bg-amber-50 border border-amber-200 text-amber-900 text-sm px-4 py-3 rounded-xl text-center">
+            Checkout canceled — no charges were made.
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {TIERS.map((tier) => {
+            const isCurrent = currentPlan === tier.id;
+
+            return (
+              <div
+                key={tier.id}
+                className={`rounded-2xl border p-6 flex flex-col ${
+                  tier.highlighted
+                    ? "border-warm-olive bg-white shadow-md ring-1 ring-warm-olive/10"
+                    : "border-warm-taupe bg-white/80"
+                }`}
+              >
+                <div className="mb-4">
+                  <div className="flex items-center justify-between">
+                    <h2 className="text-lg font-semibold text-warm-olive">
+                      {tier.name}
+                    </h2>
+                    {isCurrent && (
+                      <span className="text-xs bg-warm-cream text-warm-olive/70 px-2 py-0.5 rounded-full">
+                        Current
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-warm-olive/60 text-xs mt-1">
+                    {tier.description}
+                  </p>
+                </div>
+
+                <div className="mb-6">
+                  <span className="text-3xl font-bold text-warm-olive">
+                    {tier.price}
+                  </span>
+                  <span className="text-warm-olive/50 text-sm ml-1">
+                    {tier.period}
+                  </span>
+                </div>
+
+                <ul className="space-y-2 mb-8 flex-1">
+                  {tier.features.map((feature) => (
+                    <li
+                      key={feature}
+                      className="text-sm text-warm-olive/80 flex items-start gap-2"
+                    >
+                      <span className="text-warm-olive mt-0.5">✓</span>
+                      {feature}
+                    </li>
+                  ))}
+                </ul>
+
+                {tier.id === "free" ? (
+                  <Link
+                    href="/dashboard"
+                    className="block w-full text-center bg-warm-cream hover:bg-warm-taupe/30 text-warm-olive px-4 py-2.5 rounded-lg text-sm font-medium transition-colors"
+                  >
+                    {isCurrent ? "Current plan" : "Stay on Free"}
+                  </Link>
+                ) : (
+                  <PricingCheckout
+                    plan={tier.id}
+                    currentPlan={currentPlan}
+                    label={`Upgrade to ${tier.name}`}
+                    highlighted={tier.highlighted}
+                  />
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </main>
+    </div>
+  );
+}
+"use client";
+
+import { useState } from "react";
+import type { Plan } from "@/lib/types";
+
+interface Props {
+  plan: "pro" | "agency";
+  currentPlan: Plan;
+  label: string;
+  highlighted?: boolean;
+}
+
+export default function PricingCheckout({
+  plan,
+  currentPlan,
+  label,
+  highlighted = false,
+}: Props) {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const isCurrent = currentPlan === plan;
+  const isDowngrade =
+    currentPlan === "agency" && plan === "pro";
+
+  async function handleCheckout() {
+    setLoading(true);
+    setError(null);
+
+    try {
+      const res = await fetch("/api/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ plan }),
+      });
+      const data = (await res.json()) as { url?: string; error?: string };
+
+      if (!res.ok || !data.url) {
+        setError(data.error ?? "Checkout failed. Please try again.");
+        setLoading(false);
+        return;
+      }
+
+      window.location.href = data.url;
+    } catch {
+      setError("Checkout failed. Please try again.");
+      setLoading(false);
+    }
+  }
+
+  if (isCurrent) {
+    return (
+      <span className="inline-block w-full text-center bg-warm-cream text-warm-olive/70 px-4 py-2.5 rounded-lg text-sm font-medium">
+        Current plan
+      </span>
+    );
+  }
+
+  if (isDowngrade) {
+    return (
+      <span className="inline-block w-full text-center text-warm-olive/50 text-xs py-2.5">
+        Manage billing in Stripe
+      </span>
+    );
+  }
+
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={handleCheckout}
+        disabled={loading}
+        className={`w-full px-4 py-2.5 rounded-lg text-sm font-semibold transition-colors disabled:opacity-50 ${
+          highlighted
+            ? "bg-warm-olive hover:bg-brand-dark text-warm-ivory"
+            : "bg-white border border-warm-taupe hover:border-warm-olive/40 text-warm-olive"
+        }`}
+      >
+        {loading ? "Redirecting…" : label}
+      </button>
+      {error && (
+        <p className="text-xs text-red-600 mt-2 text-center">{error}</p>
+      )}
+    </div>
+  );
+}
+import { redirect } from "next/navigation";
+import Link from "next/link";
+import { createServerClient } from "@/lib/supabase/server";
+import MemoryEditor from "./MemoryEditor";
+import type { Plan } from "@/lib/types";
+
+interface Props {
+  params: { id: string };
+}
+
+export default async function ClientPage({ params }: Props) {
+  const supabase = createServerClient();
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
+  if (!session) redirect("/login");
+
+  const { data: client, error: clientError } = await supabase
+    .from("clients")
+    .select("id, name, industry")
+    .eq("id", params.id)
+    .eq("user_id", session.user.id)
+    .single();
+
+  if (clientError || !client) redirect("/dashboard");
+
+  const { data: memory } = await supabase
+    .from("client_memory")
+    .select("*")
+    .eq("client_id", params.id)
+    .single();
+
+  const { data: userRow } = await supabase
+    .from("users")
+    .select("plan")
+    .eq("id", session.user.id)
+    .single();
+
+  const userPlan = (userRow?.plan as Plan) ?? "free";
+
+  return (
+    <div className="min-h-screen bg-warm-ivory">
+      <nav className="border-b border-warm-taupe px-6 py-4 flex items-center gap-3 bg-white/60 backdrop-blur-sm">
+        <Link
+          href="/dashboard"
+          className="text-warm-olive/60 hover:text-warm-olive text-sm transition-colors"
+        >
+          ← Dashboard
+        </Link>
+        <span className="text-warm-taupe">/</span>
+        <span className="text-sm font-medium text-warm-olive">{client.name}</span>
+      </nav>
+
+      <main className="max-w-3xl mx-auto px-6 py-10">
+        <div className="flex items-center justify-between mb-8">
+          <div>
+            <h1 className="text-2xl font-bold text-warm-olive">{client.name}</h1>
+            {client.industry && (
+              <p className="text-warm-olive/60 text-sm mt-1">{client.industry}</p>
+            )}
+          </div>
+          <Link
+            href={`/clients/${client.id}/chat`}
+            className="bg-warm-olive hover:bg-brand-dark text-warm-ivory px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+          >
+            Open Chat →
+          </Link>
+        </div>
+
+        <MemoryEditor
+          clientId={client.id}
+          clientName={client.name}
+          clientIndustry={client.industry ?? ""}
+          memory={memory}
+          userPlan={userPlan}
+        />
+      </main>
+    </div>
+  );
+}
+"use client";
+
+import { useEffect, useRef, useState, useTransition } from "react";
+import Link from "next/link";
+import { saveDecision } from "./actions";
+import { FREE_MESSAGE_LIMIT } from "@/lib/quotaConstants";
+import type { ChatMessage, Decision, Plan, TaskType } from "@/lib/types";
+
+const TASK_LABELS: Record<TaskType, string> = {
+  general: "General",
+  email: "Email",
+  social_post: "Social",
+  blog: "Blog",
+  ad_copy: "Ad Copy",
+  landing_page: "Landing Page",
+};
+
+const TASK_KEYS = Object.keys(TASK_LABELS) as TaskType[];
+
+interface Props {
+  clientId: string;
+  clientName: string;
+  clientIndustry: string;
+  brandVoice: string | null;
+  toneRulesCount: number;
+  vocabAvoidCount: number;
+  initialTaskType: TaskType;
+  initialMessages: ChatMessage[];
+  initialDecisions: Decision[];
+  userPlan: Plan;
+  initialMessageCount: number;
+}
+
+interface Message extends ChatMessage {
+  id: string;
+  streaming?: boolean;
+}
+
+function toUiMessages(msgs: ChatMessage[]): Message[] {
+  return msgs.map((m) => ({ ...m, id: crypto.randomUUID() }));
+}
+
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <button
+      type="button"
+      onClick={async () => {
+        await navigator.clipboard.writeText(text);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1500);
+      }}
+      className="text-xs text-warm-olive/50 hover:text-warm-olive/90 transition-colors px-2 py-1 rounded bg-warm-cream hover:bg-warm-taupe/50"
+    >
+      {copied ? "Copied!" : "Copy"}
+    </button>
+  );
+}
+
+function ContextPanel({
+  clientName,
+  clientIndustry,
+  brandVoice,
+  toneRulesCount,
+  vocabAvoidCount,
+  decisionsCount,
+  taskType,
+  compact = false,
+}: {
+  clientName: string;
+  clientIndustry: string;
+  brandVoice: string | null;
+  toneRulesCount: number;
+  vocabAvoidCount: number;
+  decisionsCount: number;
+  taskType: TaskType;
+  compact?: boolean;
+}) {
+  const voiceSummary = brandVoice?.trim()
+    ? brandVoice.trim().slice(0, compact ? 60 : 120) +
+      (brandVoice.trim().length > (compact ? 60 : 120) ? "…" : "")
+    : null;
+
+  return (
+    <div className={compact ? "space-y-1" : "space-y-3"}>
+      {!compact && (
+        <p className="text-xs font-medium text-warm-olive/60 uppercase tracking-wide">
+          Context
+        </p>
+      )}
+      <p
+        className={`font-semibold text-warm-olive truncate ${
+          compact ? "text-xs" : "text-sm"
+        }`}
+      >
+        {clientName}
+      </p>
+      {clientIndustry && (
+        <p className="text-xs text-warm-olive/50 truncate">{clientIndustry}</p>
+      )}
+      {voiceSummary ? (
+        <p className={`text-warm-olive/60 leading-relaxed ${compact ? "text-xs" : "text-xs"}`}>
+          {voiceSummary}
+        </p>
+      ) : (
+        <p className="text-xs text-warm-olive/40 italic">No voice profile yet</p>
+      )}
+      <div className={`text-xs text-warm-olive/50 ${compact ? "flex flex-wrap gap-x-3 gap-y-0.5" : "space-y-1"}`}>
+        <p>{toneRulesCount} tone rule{toneRulesCount !== 1 ? "s" : ""}</p>
+        <p>{vocabAvoidCount} banned word{vocabAvoidCount !== 1 ? "s" : ""}</p>
+        <p>
+          {decisionsCount} standing decision{decisionsCount !== 1 ? "s" : ""}
+        </p>
+        {compact && (
+          <p className="capitalize">{taskType.replace("_", " ")}</p>
+        )}
+      </div>
+      {!compact && (
+        <p className="text-xs text-warm-olive/50 capitalize">
+          {taskType.replace("_", " ")}
+        </p>
+      )}
+    </div>
+  );
+}
+
+export default function ChatUI({
+  clientId,
+  clientName,
+  clientIndustry,
+  brandVoice,
+  toneRulesCount,
+  vocabAvoidCount,
+  initialTaskType,
+  initialMessages,
+  initialDecisions,
+  userPlan,
+  initialMessageCount,
+}: Props) {
+  const [messages, setMessages] = useState<Message[]>(() =>
+    toUiMessages(initialMessages)
+  );
+  const [history, setHistory] = useState<ChatMessage[]>(initialMessages);
+  const [input, setInput] = useState("");
+  const [taskType, setTaskType] = useState<TaskType>(initialTaskType);
+  const [isStreaming, setIsStreaming] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [saveWarning, setSaveWarning] = useState<string | null>(null);
+  const [showUpgradeBanner, setShowUpgradeBanner] = useState(false);
+  const [messageCount, setMessageCount] = useState(initialMessageCount);
+
+  const [decisions, setDecisions] = useState<Decision[]>(initialDecisions);
+  const [decisionInput, setDecisionInput] = useState("");
+  const [showDecisionBar, setShowDecisionBar] = useState(false);
+  const [isSavingDecision, startDecisionTransition] = useTransition();
+
+  const bottomRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  const isFreePlan = userPlan === "free";
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  function rollbackFailedSend(
+    text: string,
+    streamingId: string,
+    userMsgId: string
+  ) {
+    setInput(text);
+    setMessages((prev) =>
+      prev.filter((m) => m.id !== streamingId && m.id !== userMsgId)
+    );
+  }
+
+  async function sendMessage() {
+    const text = input.trim();
+    if (!text || isStreaming) return;
+
+    setInput("");
+    setError(null);
+    setSaveWarning(null);
+    setShowUpgradeBanner(false);
+    setShowDecisionBar(false);
+
+    const userMsg: Message = {
+      id: crypto.randomUUID(),
+      role: "user",
+      content: text,
+    };
+
+    const streamingId = crypto.randomUUID();
+    const streamingMsg: Message = {
+      id: streamingId,
+      role: "assistant",
+      content: "",
+      streaming: true,
+    };
+
+    setMessages((prev) => [...prev, userMsg, streamingMsg]);
+    setIsStreaming(true);
+
+    let fullText = "";
+    let streamSaveError: string | null = null;
+
+    try {
+      const res = await fetch("/api/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          clientId,
+          message: text,
+          taskType,
+          history,
+        }),
+      });
+
+      if (res.status === 429) {
+        setShowUpgradeBanner(true);
+        setError("Monthly message limit reached.");
+        rollbackFailedSend(text, streamingId, userMsg.id);
+        return;
+      }
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error((data as { error?: string }).error ?? `HTTP ${res.status}`);
+      }
+
+      if (!res.body) throw new Error("No response body");
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() ?? "";
+
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          const raw = line.slice(6).trim();
+          if (raw === "[DONE]") continue;
+
+          try {
+            const parsed = JSON.parse(raw) as { text?: string; error?: string };
+            if (parsed.error) {
+              if (fullText.trim()) {
+                streamSaveError = parsed.error;
+              } else {
+                throw new Error(parsed.error);
+              }
+              continue;
+            }
+            if (parsed.text) {
+              fullText += parsed.text;
+              setMessages((prev) =>
+                prev.map((m) =>
+                  m.id === streamingId
+                    ? { ...m, content: fullText, streaming: true }
+                    : m
+                )
+              );
+            }
+          } catch (parseErr) {
+            if (
+              parseErr instanceof Error &&
+              parseErr.message !== "Unexpected token"
+            ) {
+              throw parseErr;
+            }
+          }
+        }
+      }
+
+      if (!fullText.trim()) {
+        throw new Error("No copy came back. Please try again.");
+      }
+
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === streamingId ? { ...m, streaming: false } : m
+        )
+      );
+
+      if (streamSaveError) {
+        setSaveWarning(
+          `Copy generated, but this exchange wasn't saved. ${streamSaveError}`
+        );
+        setShowDecisionBar(true);
+        return;
+      }
+
+      setHistory((prev) => [
+        ...prev,
+        { role: "user", content: text },
+        { role: "assistant", content: fullText },
+      ]);
+
+      if (isFreePlan) {
+        setMessageCount((c) => c + 1);
+      }
+
+      setShowDecisionBar(true);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Something went wrong";
+      setError(msg);
+      rollbackFailedSend(text, streamingId, userMsg.id);
+    } finally {
+      setIsStreaming(false);
+      setTimeout(() => inputRef.current?.focus(), 50);
+    }
+  }
+
+  function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage();
+    }
+  }
+
+  function handleSaveDecision() {
+    const note = decisionInput.trim();
+    if (!note) return;
+
+    startDecisionTransition(async () => {
+      const result = await saveDecision(clientId, note);
+      if (result.error) {
+        setError(result.error);
+        return;
+      }
+      const newDecision: Decision = {
+        topic: "Session learning",
+        detail: note,
+        recorded_at: new Date().toISOString(),
+      };
+      setDecisions((prev) => [...prev, newDecision]);
+      setDecisionInput("");
+      setShowDecisionBar(false);
+    });
+  }
+
+  const counterClass =
+    messageCount >= 45
+      ? "text-amber-400"
+      : messageCount >= 40
+      ? "text-amber-500/80"
+      : "text-warm-olive/50";
+
+  return (
+    <div className="flex h-screen bg-warm-ivory">
+      <aside className="hidden md:flex w-56 flex-shrink-0 flex-col border-r border-warm-taupe bg-warm-ivory px-4 py-5">
+        <ContextPanel
+          clientName={clientName}
+          clientIndustry={clientIndustry}
+          brandVoice={brandVoice}
+          toneRulesCount={toneRulesCount}
+          vocabAvoidCount={vocabAvoidCount}
+          decisionsCount={decisions.length}
+          taskType={taskType}
+        />
+
+        {isFreePlan && (
+          <div className="mt-auto pt-6 border-t border-warm-taupe">
+            <p className={`text-xs ${counterClass}`}>
+              {messageCount} / {FREE_MESSAGE_LIMIT} messages this month
+            </p>
+            {messageCount >= 45 && (
+              <Link
+                href="/pricing"
+                className="text-xs text-warm-olive hover:text-brand-dark mt-1.5 inline-block transition-colors"
+              >
+                Upgrade to Pro →
+              </Link>
+            )}
+          </div>
+        )}
+      </aside>
+
+      <div className="flex flex-col flex-1 min-w-0">
+        <div className="bg-white/90 border-b border-warm-taupe px-5 py-3 flex items-center justify-between flex-shrink-0">
+          <div className="flex items-center gap-3 min-w-0">
+            <Link
+              href={`/clients/${clientId}`}
+              className="text-warm-olive/60 hover:text-warm-olive transition-colors text-sm"
+            >
+              ←
+            </Link>
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <span className="font-semibold truncate">{clientName}</span>
+                {clientIndustry && (
+                  <span className="text-xs text-warm-olive/60 bg-warm-cream px-2 py-0.5 rounded-full truncate md:hidden">
+                    {clientIndustry}
+                  </span>
+                )}
+              </div>
+              {isFreePlan && (
+                <p className={`text-xs mt-0.5 md:hidden ${counterClass}`}>
+                  {messageCount} / {FREE_MESSAGE_LIMIT} messages this month
+                </p>
+              )}
+              <div className="mt-2 md:hidden">
+                <ContextPanel
+                  clientName={clientName}
+                  clientIndustry={clientIndustry}
+                  brandVoice={brandVoice}
+                  toneRulesCount={toneRulesCount}
+                  vocabAvoidCount={vocabAvoidCount}
+                  decisionsCount={decisions.length}
+                  taskType={taskType}
+                  compact
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="flex gap-1 flex-wrap justify-end">
+            {TASK_KEYS.map((t) => (
+              <button
+                key={t}
+                type="button"
+                onClick={() => setTaskType(t)}
+                className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${
+                  taskType === t
+                    ? "bg-warm-olive text-warm-ivory"
+                    : "bg-warm-cream text-warm-olive/60 hover:text-warm-olive"
+                }`}
+              >
+                {TASK_LABELS[t]}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-4 py-6 space-y-5 scrollbar-thin">
+          {messages.length === 0 && (
+            <div className="text-center py-20 text-warm-olive/50 text-sm">
+              Start writing for{" "}
+              <span className="text-warm-olive/90">{clientName}</span>. Their brand
+              voice is loaded — start writing.
+            </div>
+          )}
+
+          {messages.map((msg) => (
+            <div
+              key={msg.id}
+              className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
+            >
+              <div
+                className={`max-w-[80%] rounded-2xl px-4 py-3 text-sm leading-relaxed ${
+                  msg.role === "user"
+                    ? "bg-warm-olive text-warm-ivory rounded-br-sm"
+                    : "bg-warm-cream text-warm-olive rounded-bl-sm"
+                }`}
+              >
+                <span style={{ whiteSpace: "pre-wrap" }}>
+                  {msg.content}
+                  {msg.streaming && (
+                    <span className="inline-block w-0.5 h-4 bg-warm-taupe ml-0.5 align-middle animate-pulse" />
+                  )}
+                </span>
+
+                {msg.role === "assistant" && !msg.streaming && msg.content && (
+                  <div className="mt-2 flex justify-end">
+                    <CopyButton text={msg.content} />
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
+
+          <div ref={bottomRef} />
+        </div>
+
+        {showUpgradeBanner && (
+          <div className="mx-4 mb-2 bg-amber-50 border border-amber-200 rounded-xl px-4 py-4 flex items-center justify-between gap-4">
+            <p className="text-sm text-amber-900">
+              You&apos;ve used all {FREE_MESSAGE_LIMIT} free messages this month.
+            </p>
+            <Link
+              href="/pricing"
+              className="bg-amber-500 hover:bg-amber-400 text-warm-olive px-4 py-2 rounded-lg text-sm font-semibold whitespace-nowrap transition-colors"
+            >
+              Upgrade to Pro →
+            </Link>
+          </div>
+        )}
+
+        {saveWarning && (
+          <div className="mx-4 mb-2 bg-amber-50 border border-amber-200 text-amber-900 text-xs px-4 py-2.5 rounded-xl flex items-center justify-between gap-3">
+            <span>{saveWarning}</span>
+            <button
+              type="button"
+              onClick={() => setSaveWarning(null)}
+              className="text-amber-600 hover:text-amber-800 flex-shrink-0"
+            >
+              ×
+            </button>
+          </div>
+        )}
+
+        {error && (
+          <div className="mx-4 mb-2 bg-red-50 border border-red-200 text-red-800 text-xs px-4 py-2.5 rounded-xl flex items-center justify-between gap-3">
+            <span>{error}</span>
+            <div className="flex items-center gap-2 flex-shrink-0">
+              {input.trim() && !isStreaming && (
+                <button
+                  type="button"
+                  onClick={sendMessage}
+                  className="text-red-700 hover:text-red-900 font-medium"
+                >
+                  Retry
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setError(null)}
+                className="text-red-400 hover:text-red-600"
+              >
+                ×
+              </button>
+            </div>
+          </div>
+        )}
+
+        {showDecisionBar && !isStreaming && (
+          <div className="mx-4 mb-2 bg-warm-cream border border-warm-taupe rounded-xl px-4 py-3 flex items-center gap-3">
+            <span className="text-xs text-warm-olive/60 whitespace-nowrap">
+              Save a decision?
+            </span>
+            <input
+              value={decisionInput}
+              onChange={(e) => setDecisionInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") handleSaveDecision();
+                if (e.key === "Escape") setShowDecisionBar(false);
+              }}
+              placeholder="e.g. Always end with a call-to-action question"
+              className="flex-1 bg-transparent text-sm text-warm-olive placeholder-warm-olive/40 focus:outline-none min-w-0"
+              autoFocus
+            />
+            <button
+              type="button"
+              onClick={handleSaveDecision}
+              disabled={isSavingDecision || !decisionInput.trim()}
+              className="text-xs bg-warm-olive hover:bg-brand-dark disabled:opacity-40 text-warm-ivory px-3 py-1.5 rounded-lg transition-colors"
+            >
+              {isSavingDecision ? "Saving…" : "Save"}
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowDecisionBar(false)}
+              className="text-warm-olive/50 hover:text-warm-olive/90 text-sm"
+            >
+              ×
+            </button>
+          </div>
+        )}
+
+        <div className="border-t border-warm-taupe px-4 py-4 flex-shrink-0">
+          <div className="flex items-end gap-3 bg-white/90 border border-warm-taupe rounded-2xl px-4 py-3 focus-within:border-warm-olive transition-colors">
+            <textarea
+              ref={inputRef}
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder={`Write ${TASK_LABELS[taskType].toLowerCase()} for ${clientName}…`}
+              rows={1}
+              disabled={isStreaming || showUpgradeBanner}
+              className="flex-1 bg-transparent text-sm text-warm-olive placeholder-warm-olive/40 focus:outline-none resize-none leading-relaxed disabled:opacity-50"
+              style={{ maxHeight: "120px", overflowY: "auto" }}
+            />
+            <button
+              type="button"
+              onClick={sendMessage}
+              disabled={isStreaming || !input.trim() || showUpgradeBanner}
+              className="bg-warm-olive hover:bg-brand-dark disabled:opacity-40 text-warm-ivory px-4 py-2 rounded-xl text-sm font-medium transition-colors flex-shrink-0"
+            >
+              {isStreaming ? "…" : "Send"}
+            </button>
+          </div>
+          <p className="text-center text-xs text-warm-olive/40 mt-2">
+            Enter to send · Shift+Enter for newline
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+"use client";
+
+import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { saveMemory } from "@/app/clients/[id]/actions";
+import { MIN_SAMPLE_CHARS } from "@/lib/sampleConstants";
+import type {
+  AnalysisResult,
+  Decision,
+  Rejection,
+  Sample,
+  SampleType,
+  SentenceStyle,
+  Structure,
+} from "@/lib/types";
+
+interface Props {
+  clientId: string;
+  clientName: string;
+  clientIndustry: string;
+}
+
+type AvgLength = "short" | "medium" | "long";
+
+interface WizardData {
+  samples: Sample[];
+  vocab_use: string[];
+  vocab_avoid: string[];
+  sentence_style: SentenceStyle;
+  structure: Structure;
+  audience_profile: string;
+  rejections: Rejection[];
+  decisions: Decision[];
+}
+
+const STEP_LABELS = [
+  "First sample",
+  "Second sample",
+  "Vocabulary",
+  "Audience",
+  "Rejection",
+  "Standing rule",
+];
+
+// ── small helpers ────────────────────────────────────────────────────────────
+
+function ProgressBar({ step, total }: { step: number; total: number }) {
+  return (
+    <div className="mb-8">
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-xs text-warm-olive/60">
+          Step {step} of {total}
+        </span>
+        <span className="text-xs text-warm-olive/50">{STEP_LABELS[step - 1]}</span>
+      </div>
+      <div className="h-1 bg-warm-cream rounded-full">
+        <div
+          className="h-1 bg-warm-olive rounded-full transition-all duration-500"
+          style={{ width: `${(step / total) * 100}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
+function StyleFlag({ label, value }: { label: string; value: boolean }) {
+  return (
+    <span
+      className={`inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full font-mono ${
+        value
+          ? "bg-emerald-100 text-emerald-800"
+          : "bg-warm-cream text-warm-olive/50"
+      }`}
+    >
+      {value ? "✓" : "—"} {label}
+    </span>
+  );
+}
+
+function AnalysisPreview({ result }: { result: AnalysisResult }) {
+  const s = result.sentence_style;
+  return (
+    <div className="bg-white/90 border border-warm-taupe rounded-xl p-4 mt-4 space-y-3">
+      <p className="text-xs font-medium text-warm-olive/60 uppercase tracking-wide">
+        What we noticed
+      </p>
+      <div className="flex flex-wrap gap-2">
+        {s.avg_length && (
+          <StyleFlag label={`sentences: ${s.avg_length}`} value={true} />
+        )}
+        <StyleFlag label="em-dash" value={!!s.uses_emdash} />
+        <StyleFlag label="opens with question" value={!!s.opens_with_question} />
+        <StyleFlag label="oxford comma" value={s.oxford_comma !== false} />
+        <StyleFlag label="exclamation points" value={!!s.exclamation_points} />
+        <StyleFlag label="first person" value={!!s.first_person} />
+      </div>
+      {result.vocab_use.length > 0 && (
+        <div>
+          <p className="text-xs text-warm-olive/50 mb-1">Characteristic words</p>
+          <div className="flex flex-wrap gap-1.5">
+            {result.vocab_use.map((v) => (
+              <span
+                key={v}
+                className="text-xs bg-warm-cream text-warm-olive px-2 py-0.5 rounded"
+              >
+                {v}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+      {result.vocab_avoid.length > 0 && (
+        <div>
+          <p className="text-xs text-warm-olive/50 mb-1">Words to avoid</p>
+          <div className="flex flex-wrap gap-1.5">
+            {result.vocab_avoid.map((v) => (
+              <span
+                key={v}
+                className="text-xs bg-red-100 text-red-800 px-2 py-0.5 rounded"
+              >
+                {v}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── main wizard ──────────────────────────────────────────────────────────────
+
+export default function OnboardingWizard({
+  clientId,
+  clientName,
+  clientIndustry,
+}: Props) {
+  const router = useRouter();
+  const [step, setStep] = useState(1);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [isSaving, startSaveTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+
+  // Per-step inputs
+  const [sampleText1, setSampleText1] = useState("");
+  const [sampleType1, setSampleType1] = useState<SampleType>("email");
+  const [analysis1, setAnalysis1] = useState<AnalysisResult | null>(null);
+
+  const [sampleText2, setSampleText2] = useState("");
+  const [sampleType2, setSampleType2] = useState<SampleType>("social");
+  const [analysis2, setAnalysis2] = useState<AnalysisResult | null>(null);
+
+  const [vocabUseDraft, setVocabUseDraft] = useState("");
+  const [vocabAvoidDraft, setVocabAvoidDraft] = useState("");
+
+  const [audience, setAudience] = useState("");
+
+  const [rejectionSample, setRejectionSample] = useState("");
+  const [rejectionReason, setRejectionReason] = useState("");
+
+  const [decisionNote, setDecisionNote] = useState("");
+
+  // Accumulated data
+  const [data, setData] = useState<WizardData>({
+    samples: [],
+    vocab_use: [],
+    vocab_avoid: [],
+    sentence_style: {},
+    structure: {},
+    audience_profile: "",
+    rejections: [],
+    decisions: [],
+  });
+
+  async function runAnalysis(text: string): Promise<AnalysisResult | null> {
+    setIsAnalyzing(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/analyze-sample", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text }),
+      });
+      const json = (await res.json()) as AnalysisResult & { error?: string };
+      if (!res.ok) throw new Error(json.error ?? "Analysis failed");
+      return json;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Analysis failed");
+      return null;
+    } finally {
+      setIsAnalyzing(false);
+    }
+  }
+
+  function mergeAnalysis(a: AnalysisResult, b: AnalysisResult): AnalysisResult {
+    return {
+      sentence_style: { ...a.sentence_style, ...b.sentence_style },
+      vocab_use: Array.from(new Set([...a.vocab_use, ...b.vocab_use])).slice(0, 10),
+      vocab_avoid: Array.from(new Set([...a.vocab_avoid, ...b.vocab_avoid])).slice(0, 8),
+    };
+  }
+
+  function splitVocab(raw: string): string[] {
+    return raw
+      .split(/[\n,]+/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+  }
+
+  // ── Step handlers ──────────────────────────────────────────────────────────
+
+  async function handleStep1Analyze() {
+    if (!sampleText1.trim()) return;
+    const result = await runAnalysis(sampleText1);
+    if (result) setAnalysis1(result);
+  }
+
+  function confirmStep1() {
+    if (analysis1) {
+      setData((d) => ({
+        ...d,
+        samples: [{ type: sampleType1, text: sampleText1 }, ...d.samples],
+        sentence_style: { ...d.sentence_style, ...analysis1.sentence_style },
+        vocab_use: Array.from(new Set([...d.vocab_use, ...analysis1.vocab_use])),
+        vocab_avoid: Array.from(new Set([...d.vocab_avoid, ...analysis1.vocab_avoid])),
+      }));
+    } else if (sampleText1.trim()) {
+      setData((d) => ({
+        ...d,
+        samples: [{ type: sampleType1, text: sampleText1 }, ...d.samples],
+      }));
+    }
+    setStep(2);
+  }
+
+  async function handleStep2Analyze() {
+    if (!sampleText2.trim()) return;
+    const result = await runAnalysis(sampleText2);
+    if (result) setAnalysis2(result);
+  }
+
+  function confirmStep2() {
+    if (!analysis2) {
+      // Allow skipping analysis — just save the sample
+      if (sampleText2.trim()) {
+        setData((d) => ({
+          ...d,
+          samples: [...d.samples, { type: sampleType2, text: sampleText2 }],
+        }));
+      }
+      setStep(3);
+      return;
+    }
+    const merged = analysis1 ? mergeAnalysis(analysis1, analysis2) : analysis2;
+    setData((d) => ({
+      ...d,
+      samples: [...d.samples, { type: sampleType2, text: sampleText2 }],
+      sentence_style: merged.sentence_style,
+      vocab_use: Array.from(new Set([...d.vocab_use, ...merged.vocab_use])),
+      vocab_avoid: Array.from(new Set([...d.vocab_avoid, ...merged.vocab_avoid])),
+    }));
+    setStep(3);
+  }
+
+  function confirmStep3() {
+    const use = splitVocab(vocabUseDraft);
+    const avoid = splitVocab(vocabAvoidDraft);
+    setData((d) => ({
+      ...d,
+      vocab_use: Array.from(new Set([...d.vocab_use, ...use])).slice(0, 12),
+      vocab_avoid: Array.from(new Set([...d.vocab_avoid, ...avoid])).slice(0, 10),
+    }));
+    setStep(4);
+  }
+
+  function confirmStep4() {
+    setData((d) => ({ ...d, audience_profile: audience.trim() }));
+    setStep(5);
+  }
+
+  function confirmStep5() {
+    if (rejectionSample.trim() && rejectionReason.trim()) {
+      setData((d) => ({
+        ...d,
+        rejections: [
+          ...d.rejections,
+          { sample: rejectionSample.trim(), reason: rejectionReason.trim() },
+        ],
+      }));
+    }
+    setStep(6);
+  }
+
+  function confirmStep6() {
+    const note = decisionNote.trim();
+    const finalDecisions = note
+      ? [
+          ...data.decisions,
+          {
+            topic: "Onboarding",
+            detail: note,
+            recorded_at: new Date().toISOString(),
+          },
+        ]
+      : data.decisions;
+
+    startSaveTransition(async () => {
+      const result = await saveMemory(clientId, {
+        samples: data.samples,
+        vocab_use: data.vocab_use,
+        vocab_avoid: data.vocab_avoid,
+        sentence_style: data.sentence_style,
+        audience_profile: data.audience_profile,
+        rejections: data.rejections,
+        decisions: finalDecisions,
+      });
+      if (result.error) {
+        setError(result.error);
+        return;
+      }
+      router.push(`/clients/${clientId}/chat`);
+    });
+  }
+
+  // ── Render helpers ─────────────────────────────────────────────────────────
+
+  const sampleTypeOptions: { value: SampleType; label: string }[] = [
+    { value: "email", label: "Email" },
+    { value: "social", label: "Social post" },
+    { value: "longform", label: "Long-form / blog" },
+  ];
+
+  function SampleStep({
+    stepNum,
+    title,
+    hint,
+    text,
+    setText,
+    type,
+    setType,
+    analysis,
+    onAnalyze,
+    onConfirm,
+    canSkip,
+  }: {
+    stepNum: number;
+    title: string;
+    hint: string;
+    text: string;
+    setText: (v: string) => void;
+    type: SampleType;
+    setType: (v: SampleType) => void;
+    analysis: AnalysisResult | null;
+    onAnalyze: () => void;
+    onConfirm: () => void;
+    canSkip?: boolean;
+  }) {
+    const trimmed = text.trim();
+    const tooShort = trimmed.length > 0 && trimmed.length < MIN_SAMPLE_CHARS;
+
+    return (
+      <div>
+        <h2 className="text-xl font-bold mb-1">{title}</h2>
+        <p className="text-warm-olive/60 text-sm mb-6">{hint}</p>
+
+        <div className="flex gap-2 mb-3">
+          {sampleTypeOptions.map((o) => (
+            <button
+              key={o.value}
+              type="button"
+              onClick={() => setType(o.value)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                type === o.value
+                  ? "bg-warm-olive text-warm-ivory"
+                  : "bg-warm-cream text-warm-olive/60 hover:text-warm-olive"
+              }`}
+            >
+              {o.label}
+            </button>
+          ))}
+        </div>
+
+        <textarea
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          rows={8}
+          placeholder="Paste their copy here…"
+          className="w-full bg-white/90 border border-warm-taupe rounded-xl px-4 py-3 text-sm text-warm-olive placeholder-warm-olive/40 focus:outline-none focus:border-warm-olive transition-colors resize-none leading-relaxed"
+        />
+
+        {tooShort && (
+          <p className="text-xs text-amber-800 mt-2">
+            Paste at least {MIN_SAMPLE_CHARS} characters to analyze patterns.
+          </p>
+        )}
+
+        {analysis && <AnalysisPreview result={analysis} />}
+
+        <div className="flex items-center gap-3 mt-6">
+          {!analysis ? (
+            <button
+              type="button"
+              onClick={onAnalyze}
+              disabled={isAnalyzing || !trimmed || tooShort}
+              className="bg-warm-olive hover:bg-brand-dark disabled:opacity-40 text-warm-ivory px-5 py-2.5 rounded-lg text-sm font-medium transition-colors"
+            >
+              {isAnalyzing ? "Analyzing…" : "Analyze sample →"}
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={onConfirm}
+              className="bg-warm-olive hover:bg-brand-dark text-warm-ivory px-5 py-2.5 rounded-lg text-sm font-medium transition-colors"
+            >
+              Confirm & continue →
+            </button>
+          )}
+          {canSkip && (
+            <button
+              type="button"
+              onClick={onConfirm}
+              className="text-sm text-warm-olive/50 hover:text-warm-olive/90 transition-colors"
+            >
+              Skip
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // ── Main render ────────────────────────────────────────────────────────────
+
+  return (
+    <div className="min-h-screen bg-warm-ivory flex items-start justify-center px-4 py-12">
+      <div className="w-full max-w-2xl">
+        <div className="mb-8">
+          <div className="flex items-center gap-2 mb-1">
+            <div className="w-7 h-7 rounded-lg bg-warm-olive flex items-center justify-center text-warm-ivory font-bold text-xs">
+              FF
+            </div>
+            <span className="text-sm text-warm-olive/60">
+              Setting up voice for{" "}
+              <span className="text-warm-olive">{clientName}</span>
+              {clientIndustry ? ` · ${clientIndustry}` : ""}
+            </span>
+          </div>
+          <ProgressBar step={step} total={6} />
+        </div>
+
+        {error && (
+          <div className="mb-5 bg-red-50 border border-red-200 text-red-800 text-xs px-4 py-3 rounded-xl">
+            {error}
+          </div>
+        )}
+
+        {/* Step 1 */}
+        {step === 1 && (
+          <SampleStep
+            stepNum={1}
+            title="Paste their best piece of copy."
+            hint="Any format — email, post, article. The more representative, the better."
+            text={sampleText1}
+            setText={setSampleText1}
+            type={sampleType1}
+            setType={setSampleType1}
+            analysis={analysis1}
+            onAnalyze={handleStep1Analyze}
+            onConfirm={confirmStep1}
+            canSkip
+          />
+        )}
+
+        {/* Step 2 */}
+        {step === 2 && (
+          <SampleStep
+            stepNum={2}
+            title="Paste a second sample."
+            hint="A different format if possible — this cross-validates the patterns we detected."
+            text={sampleText2}
+            setText={setSampleText2}
+            type={sampleType2}
+            setType={setSampleType2}
+            analysis={analysis2}
+            onAnalyze={handleStep2Analyze}
+            onConfirm={confirmStep2}
+            canSkip
+          />
+        )}
+
+        {/* Step 3 */}
+        {step === 3 && (
+          <div>
+            <h2 className="text-xl font-bold mb-1">
+              List words they love and words they'd never use.
+            </h2>
+            <p className="text-warm-olive/60 text-sm mb-6">
+              Comma or line-separated. These override anything we detect from your samples.
+            </p>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium mb-2">
+                  Words / phrases they always use
+                  <span className="text-warm-olive/50 font-normal ml-2">(up to 12)</span>
+                </label>
+                <textarea
+                  value={vocabUseDraft}
+                  onChange={(e) => setVocabUseDraft(e.target.value)}
+                  rows={3}
+                  placeholder="e.g. no-brainer, let's be honest, the truth is, quietly, relentlessly"
+                  className="w-full bg-white/90 border border-warm-taupe rounded-xl px-4 py-3 text-sm text-warm-olive placeholder-warm-olive/40 focus:outline-none focus:border-warm-olive transition-colors resize-none"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-2">
+                  Words they'd never use
+                  <span className="text-warm-olive/50 font-normal ml-2">(up to 10)</span>
+                </label>
+                <textarea
+                  value={vocabAvoidDraft}
+                  onChange={(e) => setVocabAvoidDraft(e.target.value)}
+                  rows={3}
+                  placeholder="e.g. synergy, leverage, game-changer, disruptive, unlock"
+                  className="w-full bg-white/90 border border-warm-taupe rounded-xl px-4 py-3 text-sm text-warm-olive placeholder-warm-olive/40 focus:outline-none focus:border-warm-olive transition-colors resize-none"
+                />
+              </div>
+            </div>
+
+            {/* Preview what we already have from analysis */}
+            {(data.vocab_use.length > 0 || data.vocab_avoid.length > 0) && (
+              <div className="mt-4 bg-white/90 border border-warm-taupe rounded-xl p-4">
+                <p className="text-xs text-warm-olive/50 mb-2">
+                  Already found in your samples — these will be merged:
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {data.vocab_use.map((v) => (
+                    <span key={v} className="text-xs bg-warm-cream text-warm-olive px-2 py-0.5 rounded">
+                      {v}
+                    </span>
+                  ))}
+                  {data.vocab_avoid.map((v) => (
+                    <span key={v} className="text-xs bg-red-100 text-red-800 px-2 py-0.5 rounded">
+                      ✗ {v}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="flex gap-3 mt-6">
+              <button
+                type="button"
+                onClick={confirmStep3}
+                className="bg-warm-olive hover:bg-brand-dark text-warm-ivory px-5 py-2.5 rounded-lg text-sm font-medium transition-colors"
+              >
+                Continue →
+              </button>
+              <button
+                type="button"
+                onClick={() => setStep(4)}
+                className="text-sm text-warm-olive/50 hover:text-warm-olive/90 transition-colors"
+              >
+                Skip
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Step 4 */}
+        {step === 4 && (
+          <div>
+            <h2 className="text-xl font-bold mb-1">Describe their reader in one sentence.</h2>
+            <p className="text-warm-olive/60 text-sm mb-6">
+              Who is the copy actually for? It will read as if written directly for this person.
+            </p>
+            <textarea
+              value={audience}
+              onChange={(e) => setAudience(e.target.value)}
+              rows={3}
+              placeholder="e.g. Solo founders aged 28–40 who are tired of over-engineered software and just want things to work."
+              className="w-full bg-white/90 border border-warm-taupe rounded-xl px-4 py-3 text-sm text-warm-olive placeholder-warm-olive/40 focus:outline-none focus:border-warm-olive transition-colors resize-none leading-relaxed"
+            />
+            <div className="flex gap-3 mt-6">
+              <button
+                type="button"
+                onClick={confirmStep4}
+                disabled={!audience.trim()}
+                className="bg-warm-olive hover:bg-brand-dark disabled:opacity-40 text-warm-ivory px-5 py-2.5 rounded-lg text-sm font-medium transition-colors"
+              >
+                Continue →
+              </button>
+              <button
+                type="button"
+                onClick={() => setStep(5)}
+                className="text-sm text-warm-olive/50 hover:text-warm-olive/90 transition-colors"
+              >
+                Skip
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Step 5 */}
+        {step === 5 && (
+          <div>
+            <h2 className="text-xl font-bold mb-1">Paste something they rejected.</h2>
+            <p className="text-warm-olive/60 text-sm mb-6">
+              What didn't work teaches us more than guidelines alone.
+            </p>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs text-warm-olive/60 mb-1.5">Rejected copy</label>
+                <textarea
+                  value={rejectionSample}
+                  onChange={(e) => setRejectionSample(e.target.value)}
+                  rows={4}
+                  placeholder="Paste the copy they shot down…"
+                  className="w-full bg-white/90 border border-warm-taupe rounded-xl px-4 py-3 text-sm text-warm-olive placeholder-warm-olive/40 focus:outline-none focus:border-warm-olive transition-colors resize-none leading-relaxed"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-warm-olive/60 mb-1.5">
+                  Why they rejected it <span className="text-warm-olive/40">(one sentence)</span>
+                </label>
+                <input
+                  value={rejectionReason}
+                  onChange={(e) => setRejectionReason(e.target.value)}
+                  placeholder="e.g. Too corporate — felt like a press release, not a human."
+                  className="w-full bg-white/90 border border-warm-taupe rounded-xl px-4 py-3 text-sm text-warm-olive placeholder-warm-olive/40 focus:outline-none focus:border-warm-olive transition-colors"
+                />
+              </div>
+            </div>
+            <div className="flex gap-3 mt-6">
+              <button
+                type="button"
+                onClick={confirmStep5}
+                disabled={!rejectionSample.trim() || !rejectionReason.trim()}
+                className="bg-warm-olive hover:bg-brand-dark disabled:opacity-40 text-warm-ivory px-5 py-2.5 rounded-lg text-sm font-medium transition-colors"
+              >
+                Continue →
+              </button>
+              <button
+                type="button"
+                onClick={() => setStep(6)}
+                className="text-sm text-warm-olive/50 hover:text-warm-olive/90 transition-colors"
+              >
+                Skip
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Step 6 */}
+        {step === 6 && (
+          <div>
+            <h2 className="text-xl font-bold mb-1">
+              What's one content rule you'll never break for this client?
+            </h2>
+            <p className="text-warm-olive/60 text-sm mb-6">
+              This goes into standing decisions — we'll follow it automatically, no need to repeat it.
+            </p>
+            <input
+              value={decisionNote}
+              onChange={(e) => setDecisionNote(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") confirmStep6();
+              }}
+              placeholder="e.g. Always end every piece with a direct question to the reader."
+              className="w-full bg-white/90 border border-warm-taupe rounded-xl px-4 py-3 text-sm text-warm-olive placeholder-warm-olive/40 focus:outline-none focus:border-warm-olive transition-colors"
+            />
+
+            {/* Summary of what will be saved */}
+            <div className="mt-6 bg-white/90 border border-warm-taupe rounded-xl p-5 space-y-3">
+              <p className="text-xs font-medium text-warm-olive/60 uppercase tracking-wide">
+                What gets saved
+              </p>
+              <div className="space-y-1.5 text-sm text-warm-olive/90">
+                <p>
+                  <span className="text-warm-olive/50 w-28 inline-block">Samples</span>
+                  {data.samples.length} piece{data.samples.length !== 1 ? "s" : ""}
+                </p>
+                <p>
+                  <span className="text-warm-olive/50 w-28 inline-block">Use vocab</span>
+                  {data.vocab_use.length > 0 ? data.vocab_use.join(", ") : "—"}
+                </p>
+                <p>
+                  <span className="text-warm-olive/50 w-28 inline-block">Avoid vocab</span>
+                  {data.vocab_avoid.length > 0 ? data.vocab_avoid.join(", ") : "—"}
+                </p>
+                <p>
+                  <span className="text-warm-olive/50 w-28 inline-block">Audience</span>
+                  {data.audience_profile || "—"}
+                </p>
+                <p>
+                  <span className="text-warm-olive/50 w-28 inline-block">Rejections</span>
+                  {data.rejections.length} item{data.rejections.length !== 1 ? "s" : ""}
+                </p>
+                {decisionNote.trim() && (
+                  <p>
+                    <span className="text-warm-olive/50 w-28 inline-block">Rule</span>
+                    {decisionNote.trim()}
+                  </p>
+                )}
+              </div>
+            </div>
+
+            <div className="flex gap-3 mt-6">
+              <button
+                type="button"
+                onClick={confirmStep6}
+                disabled={isSaving}
+                className="bg-warm-olive hover:bg-brand-dark disabled:opacity-50 text-warm-ivory px-6 py-2.5 rounded-lg text-sm font-medium transition-colors"
+              >
+                {isSaving ? "Saving…" : "Finish — open chat →"}
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+"use client";
+
+import { useEffect, useMemo, useState, useTransition } from "react";
+import Link from "next/link";
+import { buildClientContext } from "@/lib/buildClientContext";
+import { exportMemoryPdf } from "@/lib/exportMemoryPdf";
+import {
+  CONTEXT_CHAR_MAX,
+  CONTEXT_CHAR_WARN,
+} from "@/lib/memoryConstants";
+import { MIN_SAMPLE_CHARS } from "@/lib/sampleConstants";
+import { saveClientMeta, saveMemory, deleteClient } from "./actions";
+import type {
+  AnalysisResult,
+  ClientMemory,
+  Decision,
+  Plan,
+  Rejection,
+  Sample,
+  SampleType,
+  SentenceStyle,
+  Structure,
+} from "@/lib/types";
+
+// ── shared primitives ─────────────────────────────────────────────────────────
+
+interface Props {
+  clientId: string;
+  clientName: string;
+  clientIndustry: string;
+  memory: ClientMemory | null;
+  userPlan: Plan;
+}
+
+type Tab = "voice" | "samples" | "rules";
+
+const TABS: { id: Tab; label: string }[] = [
+  { id: "voice", label: "Voice" },
+  { id: "samples", label: "Samples" },
+  { id: "rules", label: "Rules" },
+];
+
+function buildSnapshot(data: {
+  name: string;
+  industry: string;
+  brandVoice: string;
+  audienceProfile: string;
+  toneRules: string[];
+  vocabUse: string[];
+  vocabAvoid: string[];
+  sentenceStyle: SentenceStyle;
+  structure: Structure;
+  samples: Sample[];
+  decisions: Decision[];
+  rejections: Rejection[];
+}) {
+  return JSON.stringify(data);
+}
+
+function TagInput({
+  tags,
+  onChange,
+  placeholder,
+  colorClass = "bg-warm-taupe/50 text-warm-olive",
+}: {
+  tags: string[];
+  onChange: (t: string[]) => void;
+  placeholder?: string;
+  colorClass?: string;
+}) {
+  const [draft, setDraft] = useState("");
+  function add() {
+    const t = draft.trim();
+    if (t && !tags.includes(t)) onChange([...tags, t]);
+    setDraft("");
+  }
+  return (
+    <div>
+      <div className="flex flex-wrap gap-1.5 mb-2 min-h-[24px]">
+        {tags.map((tag) => (
+          <span
+            key={tag}
+            className={`inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full ${colorClass}`}
+          >
+            {tag}
+            <button
+              type="button"
+              onClick={() => onChange(tags.filter((t) => t !== tag))}
+              className="opacity-60 hover:opacity-100 leading-none"
+            >
+              ×
+            </button>
+          </span>
+        ))}
+      </div>
+      <div className="flex gap-2">
+        <input
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === ",") {
+              e.preventDefault();
+              add();
+            }
+          }}
+          placeholder={placeholder}
+          className="flex-1 bg-warm-cream border border-warm-taupe rounded-lg px-3 py-2 text-sm text-warm-olive placeholder-warm-olive/40 focus:outline-none focus:border-warm-olive transition-colors"
+        />
+        <button
+          type="button"
+          onClick={add}
+          className="px-3 py-2 text-sm bg-warm-taupe/50 hover:bg-warm-taupe text-warm-olive rounded-lg transition-colors"
+        >
+          Add
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function SectionCard({
+  title,
+  hint,
+  children,
+}: {
+  title: string;
+  hint?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="border border-warm-taupe rounded-xl p-5">
+      <div className="mb-3">
+        <h3 className="font-medium text-sm">{title}</h3>
+        {hint && <p className="text-xs text-warm-olive/50 mt-0.5">{hint}</p>}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function Textarea({
+  value,
+  onChange,
+  placeholder,
+  rows = 3,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+  rows?: number;
+}) {
+  return (
+    <textarea
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      placeholder={placeholder}
+      rows={rows}
+      className="w-full bg-warm-cream border border-warm-taupe rounded-lg px-3 py-2.5 text-sm text-warm-olive placeholder-warm-olive/40 focus:outline-none focus:border-warm-olive transition-colors resize-none leading-relaxed"
+    />
+  );
+}
+
+function Toggle({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: boolean | undefined;
+  onChange: (v: boolean) => void;
+}) {
+  return (
+    <label className="flex items-center gap-3 cursor-pointer group">
+      <button
+        type="button"
+        role="switch"
+        aria-checked={!!value}
+        onClick={() => onChange(!value)}
+        className={`relative w-9 h-5 rounded-full transition-colors flex-shrink-0 ${
+          value ? "bg-warm-olive" : "bg-warm-taupe/50"
+        }`}
+      >
+        <span
+          className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform ${
+            value ? "translate-x-4" : "translate-x-0"
+          }`}
+        />
+      </button>
+      <span className="text-sm text-warm-olive/90 group-hover:text-warm-olive transition-colors">
+        {label}
+      </span>
+    </label>
+  );
+}
+
+// ── main component ────────────────────────────────────────────────────────────
+
+export default function MemoryEditor({
+  clientId,
+  clientName,
+  clientIndustry,
+  memory,
+  userPlan,
+}: Props) {
+  const [activeTab, setActiveTab] = useState<Tab>("voice");
+
+  const [name, setName] = useState(clientName);
+  const [industry, setIndustry] = useState(clientIndustry);
+
+  const [brandVoice, setBrandVoice] = useState(memory?.brand_voice ?? "");
+  const [audienceProfile, setAudienceProfile] = useState(
+    memory?.audience_profile ?? ""
+  );
+  const [toneRules, setToneRules] = useState<string[]>(memory?.tone_rules ?? []);
+
+  const [vocabUse, setVocabUse] = useState<string[]>(memory?.vocab_use ?? []);
+  const [vocabAvoid, setVocabAvoid] = useState<string[]>(memory?.vocab_avoid ?? []);
+  const [sentenceStyle, setSentenceStyle] = useState<SentenceStyle>(
+    memory?.sentence_style ?? {}
+  );
+  const [structure, setStructure] = useState<Structure>(memory?.structure ?? {});
+
+  // Samples
+  const [samples, setSamples] = useState<Sample[]>(memory?.samples ?? []);
+  const [addingSample, setAddingSample] = useState(false);
+  const [newSampleText, setNewSampleText] = useState("");
+  const [newSampleType, setNewSampleType] = useState<SampleType>("email");
+  const [pendingAnalysis, setPendingAnalysis] = useState<AnalysisResult | null>(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+
+  // Rules
+  const [decisions, setDecisions] = useState<Decision[]>(memory?.decisions ?? []);
+  const [rejections, setRejections] = useState<Rejection[]>(memory?.rejections ?? []);
+  const [newDecision, setNewDecision] = useState("");
+  const [newRejectionSample, setNewRejectionSample] = useState("");
+  const [newRejectionReason, setNewRejectionReason] = useState("");
+
+  // Save state
+  const [isSaving, startSaveTransition] = useTransition();
+  const [isSavingMeta, startMetaTransition] = useTransition();
+  const [isDeleting, startDeleteTransition] = useTransition();
+  const [saveStatus, setSaveStatus] = useState<"idle" | "saved" | "error">("idle");
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [showPdfUpgrade, setShowPdfUpgrade] = useState(false);
+
+  const [savedSnapshot, setSavedSnapshot] = useState(() =>
+    buildSnapshot({
+      name: clientName,
+      industry: clientIndustry,
+      brandVoice: memory?.brand_voice ?? "",
+      audienceProfile: memory?.audience_profile ?? "",
+      toneRules: memory?.tone_rules ?? [],
+      vocabUse: memory?.vocab_use ?? [],
+      vocabAvoid: memory?.vocab_avoid ?? [],
+      sentenceStyle: memory?.sentence_style ?? {},
+      structure: memory?.structure ?? {},
+      samples: memory?.samples ?? [],
+      decisions: memory?.decisions ?? [],
+      rejections: memory?.rejections ?? [],
+    })
+  );
+
+  const isProPlus = userPlan === "pro" || userPlan === "agency";
+
+  const newSampleTrimmed = newSampleText.trim();
+  const newSampleTooShort =
+    newSampleTrimmed.length > 0 && newSampleTrimmed.length < MIN_SAMPLE_CHARS;
+
+  useEffect(() => {
+    if (saveStatus !== "saved") return;
+    const t = setTimeout(() => setSaveStatus("idle"), 2000);
+    return () => clearTimeout(t);
+  }, [saveStatus]);
+
+  const currentSnapshot = useMemo(
+    () =>
+      buildSnapshot({
+        name,
+        industry,
+        brandVoice,
+        audienceProfile,
+        toneRules,
+        vocabUse,
+        vocabAvoid,
+        sentenceStyle,
+        structure,
+        samples,
+        decisions,
+        rejections,
+      }),
+    [
+      name,
+      industry,
+      brandVoice,
+      audienceProfile,
+      toneRules,
+      vocabUse,
+      vocabAvoid,
+      sentenceStyle,
+      structure,
+      samples,
+      decisions,
+      rejections,
+    ]
+  );
+
+  const isDirty = currentSnapshot !== savedSnapshot;
+
+  const contextPreview = useMemo(
+    () =>
+      buildClientContext({
+        name,
+        industry: industry || null,
+        brand_voice: brandVoice || null,
+        audience_profile: audienceProfile || null,
+        tone_rules: toneRules,
+        vocab_use: vocabUse,
+        vocab_avoid: vocabAvoid,
+        sentence_style: sentenceStyle,
+        structure,
+        decisions,
+        rejections,
+        samples,
+      }),
+    [
+      name,
+      industry,
+      brandVoice,
+      audienceProfile,
+      toneRules,
+      vocabUse,
+      vocabAvoid,
+      sentenceStyle,
+      structure,
+      decisions,
+      rejections,
+      samples,
+    ]
+  );
+
+  useEffect(() => {
+    if (!isDirty) return;
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, [isDirty]);
+
+  useEffect(() => {
+    if (!isDirty) return;
+    const onClick = (e: MouseEvent) => {
+      const anchor = (e.target as HTMLElement).closest("a");
+      if (!anchor || anchor.target === "_blank") return;
+      const href = anchor.getAttribute("href");
+      if (!href || href.startsWith("#")) return;
+      if (
+        !window.confirm(
+          "You have unsaved memory changes. Leave without saving?"
+        )
+      ) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    };
+    document.addEventListener("click", onClick, true);
+    return () => document.removeEventListener("click", onClick, true);
+  }, [isDirty]);
+
+  // ── helpers ───────────────────────────────────────────────────────────────
+
+  function patchStyle(patch: Partial<SentenceStyle>) {
+    setSentenceStyle((prev) => ({ ...prev, ...patch }));
+  }
+  function patchStructure(patch: Partial<Structure>) {
+    setStructure((prev) => ({ ...prev, ...patch }));
+  }
+
+  function handleMetaSave() {
+    const fd = new FormData();
+    fd.set("name", name);
+    fd.set("industry", industry);
+    startMetaTransition(async () => {
+      const r = await saveClientMeta(clientId, fd);
+      if (r?.error) {
+        setErrorMsg(r.error);
+      } else {
+        setSavedSnapshot(
+          buildSnapshot({
+            name,
+            industry,
+            brandVoice,
+            audienceProfile,
+            toneRules,
+            vocabUse,
+            vocabAvoid,
+            sentenceStyle,
+            structure,
+            samples,
+            decisions,
+            rejections,
+          })
+        );
+      }
+    });
+  }
+
+  function handleSave() {
+    startSaveTransition(async () => {
+      const result = await saveMemory(clientId, {
+        brand_voice: brandVoice || null,
+        audience_profile: audienceProfile || null,
+        tone_rules: toneRules,
+        vocab_use: vocabUse,
+        vocab_avoid: vocabAvoid,
+        sentence_style: sentenceStyle,
+        structure,
+        decisions,
+        rejections,
+        samples,
+      });
+      if (result.error) {
+        setErrorMsg(result.error);
+        setSaveStatus("error");
+      } else {
+        setSavedSnapshot(currentSnapshot);
+        setSaveStatus("saved");
+        setErrorMsg(null);
+      }
+    });
+  }
+
+  function handleExportPdf() {
+    if (!isProPlus) {
+      setShowPdfUpgrade(true);
+      return;
+    }
+    exportMemoryPdf({
+      clientName: name,
+      industry,
+      brandVoice,
+      audienceProfile,
+      toneRules,
+      vocabUse,
+      vocabAvoid,
+      samples,
+      decisions,
+      rejections,
+    });
+  }
+
+  // ── sample analysis ───────────────────────────────────────────────────────
+
+  async function handleAnalyzeSample() {
+    const trimmed = newSampleText.trim();
+    if (!trimmed) return;
+    if (trimmed.length < MIN_SAMPLE_CHARS) {
+      setErrorMsg(
+        `Paste at least ${MIN_SAMPLE_CHARS} characters of copy to analyze.`
+      );
+      return;
+    }
+    setIsAnalyzing(true);
+    setErrorMsg(null);
+    try {
+      const res = await fetch("/api/analyze-sample", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: newSampleText }),
+      });
+      const json = (await res.json()) as AnalysisResult & { error?: string };
+      if (!res.ok) throw new Error(json.error ?? "Analysis failed");
+      setPendingAnalysis(json);
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : "Analysis failed");
+    } finally {
+      setIsAnalyzing(false);
+    }
+  }
+
+  function confirmAddSample() {
+    if (!newSampleText.trim()) return;
+    setSamples((prev) => [
+      ...prev,
+      { type: newSampleType, text: newSampleText.trim() },
+    ]);
+    if (pendingAnalysis) {
+      setSentenceStyle((prev) => ({ ...prev, ...pendingAnalysis.sentence_style }));
+      setVocabUse((prev) =>
+        Array.from(new Set([...prev, ...pendingAnalysis.vocab_use])).slice(0, 12)
+      );
+      setVocabAvoid((prev) =>
+        Array.from(new Set([...prev, ...pendingAnalysis.vocab_avoid])).slice(0, 10)
+      );
+    }
+    setNewSampleText("");
+    setNewSampleType("email");
+    setPendingAnalysis(null);
+    setAddingSample(false);
+    setActiveTab("voice");
+  }
+
+  // ── tab content ──────────────────────────────────────────────────────────
+
+  const SAMPLE_TYPES: { value: SampleType; label: string }[] = [
+    { value: "email", label: "Email" },
+    { value: "social", label: "Social" },
+    { value: "longform", label: "Long-form" },
+  ];
+
+  const voiceTab = (
+    <div className="space-y-4">
+      <SectionCard title="Client Info">
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="block text-xs text-warm-olive/60 mb-1.5">Name</label>
+            <input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              onBlur={handleMetaSave}
+              className="w-full bg-warm-cream border border-warm-taupe rounded-lg px-3 py-2 text-sm text-warm-olive focus:outline-none focus:border-warm-olive transition-colors"
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-warm-olive/60 mb-1.5">Industry</label>
+            <input
+              value={industry}
+              onChange={(e) => setIndustry(e.target.value)}
+              onBlur={handleMetaSave}
+              placeholder="e.g. SaaS, fintech…"
+              className="w-full bg-warm-cream border border-warm-taupe rounded-lg px-3 py-2 text-sm text-warm-olive placeholder-warm-olive/40 focus:outline-none focus:border-warm-olive transition-colors"
+            />
+          </div>
+        </div>
+      </SectionCard>
+
+      <SectionCard
+        title="Brand Voice"
+        hint="Describe how this client writes — adjectives, references, personality."
+      >
+        <Textarea
+          value={brandVoice}
+          onChange={setBrandVoice}
+          placeholder="e.g. Warm, direct, never salesy. Like a trusted friend who happens to be an expert."
+          rows={3}
+        />
+      </SectionCard>
+
+      <SectionCard
+        title="Target Audience"
+        hint="Describe the ideal reader in one or two sentences."
+      >
+        <Textarea
+          value={audienceProfile}
+          onChange={setAudienceProfile}
+          placeholder="e.g. Solo founders aged 28–40 who value clarity over jargon."
+          rows={2}
+        />
+      </SectionCard>
+
+      <SectionCard
+        title="Tone Rules"
+        hint="Standing tone instructions — press Enter or comma to add."
+      >
+        <TagInput
+          tags={toneRules}
+          onChange={setToneRules}
+          placeholder='e.g. Never use exclamation points, Always lead with a stat'
+          colorClass="bg-warm-taupe/40 text-warm-olive"
+        />
+      </SectionCard>
+
+      <SectionCard
+        title="Characteristic Vocabulary"
+        hint="Words and phrases this client always uses. Press Enter or comma to add."
+      >
+        <TagInput
+          tags={vocabUse}
+          onChange={setVocabUse}
+          placeholder="e.g. no-brainer, let's be honest, quietly"
+          colorClass="bg-warm-cream text-warm-olive"
+        />
+      </SectionCard>
+
+      <SectionCard
+        title="Words to Never Use"
+        hint="We'll never use these words in copy for this client."
+      >
+        <TagInput
+          tags={vocabAvoid}
+          onChange={setVocabAvoid}
+          placeholder="e.g. synergy, leverage, game-changer"
+          colorClass="bg-red-100 text-red-800"
+        />
+      </SectionCard>
+
+      <SectionCard
+        title="Sentence Mechanics"
+        hint="Toggle each trait on or off. Auto-detected from samples — override freely."
+      >
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            {(["short", "medium", "long"] as const).map((len) => (
+              <button
+                key={len}
+                type="button"
+                onClick={() =>
+                  patchStyle({
+                    avg_length: sentenceStyle.avg_length === len ? undefined : len,
+                  })
+                }
+                className={`py-2 rounded-lg text-sm capitalize transition-colors ${
+                  sentenceStyle.avg_length === len
+                    ? "bg-warm-olive text-warm-ivory"
+                    : "bg-warm-cream text-warm-olive/60 hover:text-warm-olive"
+                }`}
+              >
+                {len} sentences
+              </button>
+            ))}
+          </div>
+          <div className="space-y-2.5 pt-1">
+            <Toggle
+              label="Uses em-dashes — like this"
+              value={sentenceStyle.uses_emdash}
+              onChange={(v) => patchStyle({ uses_emdash: v })}
+            />
+            <Toggle
+              label="Opens copy with a question"
+              value={sentenceStyle.opens_with_question}
+              onChange={(v) => patchStyle({ opens_with_question: v })}
+            />
+            <Toggle
+              label="Oxford comma"
+              value={sentenceStyle.oxford_comma}
+              onChange={(v) => patchStyle({ oxford_comma: v })}
+            />
+            <Toggle
+              label="Exclamation points"
+              value={sentenceStyle.exclamation_points}
+              onChange={(v) => patchStyle({ exclamation_points: v })}
+            />
+            <Toggle
+              label="First-person voice (I / we)"
+              value={sentenceStyle.first_person}
+              onChange={(v) => patchStyle({ first_person: v })}
+            />
+          </div>
+        </div>
+      </SectionCard>
+
+      <SectionCard
+        title="Structure & Formatting"
+        hint="How this client organises their copy."
+      >
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <Toggle
+              label="Uses bullet points"
+              value={structure.uses_bullets}
+              onChange={(v) => patchStructure({ uses_bullets: v })}
+            />
+          </div>
+          <div className="grid grid-cols-3 gap-2 pt-1">
+            {(["short", "medium", "long"] as const).map((len) => (
+              <button
+                key={len}
+                type="button"
+                onClick={() =>
+                  patchStructure({
+                    paragraph_length:
+                      structure.paragraph_length === len ? undefined : len,
+                  })
+                }
+                className={`py-2 rounded-lg text-sm capitalize transition-colors ${
+                  structure.paragraph_length === len
+                    ? "bg-warm-olive text-warm-ivory"
+                    : "bg-warm-cream text-warm-olive/60 hover:text-warm-olive"
+                }`}
+              >
+                {len} paragraphs
+              </button>
+            ))}
+          </div>
+          <div>
+            <label className="block text-xs text-warm-olive/60 mb-1.5">
+              Email sign-off
+            </label>
+            <input
+              value={structure.email_signoff ?? ""}
+              onChange={(e) => patchStructure({ email_signoff: e.target.value })}
+              placeholder="e.g. Warmly, / Talk soon, / — Jacob"
+              className="w-full bg-warm-cream border border-warm-taupe rounded-lg px-3 py-2 text-sm text-warm-olive placeholder-warm-olive/40 focus:outline-none focus:border-warm-olive transition-colors"
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-warm-olive/60 mb-1.5">CTA style</label>
+            <input
+              value={structure.cta_style ?? ""}
+              onChange={(e) => patchStructure({ cta_style: e.target.value })}
+              placeholder="e.g. End with a question / Single imperative button"
+              className="w-full bg-warm-cream border border-warm-taupe rounded-lg px-3 py-2 text-sm text-warm-olive placeholder-warm-olive/40 focus:outline-none focus:border-warm-olive transition-colors"
+            />
+          </div>
+        </div>
+      </SectionCard>
+    </div>
+  );
+
+  const samplesTab = (
+    <div className="space-y-4">
+      {samples.length === 0 && !addingSample && (
+        <div className="text-center py-16 border border-dashed border-warm-taupe rounded-xl">
+          <p className="text-warm-olive/50 text-sm mb-3">
+            No samples yet. Samples are the highest-weight signal in the context.
+          </p>
+          <button
+            type="button"
+            onClick={() => setAddingSample(true)}
+            className="bg-warm-olive hover:bg-brand-dark text-warm-ivory px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+          >
+            Add first sample
+          </button>
+        </div>
+      )}
+
+      {samples.map((s, i) => (
+        <div key={i} className="border border-warm-taupe rounded-xl p-4">
+          <div className="flex items-center justify-between mb-2">
+            <span
+              className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                s.type === "email"
+                  ? "bg-blue-900/40 text-blue-300"
+                  : s.type === "social"
+                  ? "bg-purple-900/40 text-purple-300"
+                  : "bg-amber-900/40 text-amber-300"
+              }`}
+            >
+              {s.type}
+            </span>
+            <button
+              type="button"
+              onClick={() => setSamples((prev) => prev.filter((_, j) => j !== i))}
+              className="text-warm-olive/50 hover:text-red-400 text-sm transition-colors"
+            >
+              Remove
+            </button>
+          </div>
+          <p className="text-sm text-warm-olive/60 leading-relaxed line-clamp-4">
+            {s.text}
+          </p>
+        </div>
+      ))}
+
+      {addingSample ? (
+        <div className="border border-warm-taupe rounded-xl p-5 space-y-4">
+          <p className="text-sm font-medium">New sample</p>
+          <div className="flex gap-2">
+            {SAMPLE_TYPES.map((o) => (
+              <button
+                key={o.value}
+                type="button"
+                onClick={() => setNewSampleType(o.value)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                  newSampleType === o.value
+                    ? "bg-warm-olive text-warm-ivory"
+                    : "bg-warm-cream text-warm-olive/60 hover:text-warm-olive"
+                }`}
+              >
+                {o.label}
+              </button>
+            ))}
+          </div>
+          <textarea
+            value={newSampleText}
+            onChange={(e) => setNewSampleText(e.target.value)}
+            rows={7}
+            placeholder="Paste their copy here…"
+            className="w-full bg-warm-cream border border-warm-taupe rounded-lg px-3 py-2.5 text-sm text-warm-olive placeholder-warm-olive/40 focus:outline-none focus:border-warm-olive transition-colors resize-none leading-relaxed"
+          />
+
+          {newSampleTooShort && (
+            <p className="text-xs text-amber-800">
+              Paste at least {MIN_SAMPLE_CHARS} characters to analyze patterns.
+            </p>
+          )}
+
+          {pendingAnalysis && (
+            <div className="bg-white/90 border border-warm-taupe rounded-xl p-4 space-y-2">
+              <p className="text-xs font-medium text-warm-olive/60">
+                Detected — will be merged into Voice tab:
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {pendingAnalysis.sentence_style.avg_length && (
+                  <span className="text-xs bg-warm-cream text-warm-olive/90 px-2 py-0.5 rounded-full">
+                    sentences: {pendingAnalysis.sentence_style.avg_length}
+                  </span>
+                )}
+                {pendingAnalysis.vocab_use.map((v) => (
+                  <span
+                    key={v}
+                    className="text-xs bg-warm-cream text-warm-olive px-2 py-0.5 rounded"
+                  >
+                    {v}
+                  </span>
+                ))}
+                {pendingAnalysis.vocab_avoid.map((v) => (
+                  <span
+                    key={v}
+                    className="text-xs bg-red-100 text-red-800 px-2 py-0.5 rounded"
+                  >
+                    ✗ {v}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="flex gap-3">
+            {!pendingAnalysis ? (
+              <button
+                type="button"
+                onClick={handleAnalyzeSample}
+                disabled={
+                  isAnalyzing || !newSampleTrimmed || newSampleTooShort
+                }
+                className="bg-warm-olive hover:bg-brand-dark disabled:opacity-40 text-warm-ivory px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+              >
+                {isAnalyzing ? "Analyzing…" : "Analyze →"}
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={confirmAddSample}
+                className="bg-warm-olive hover:bg-brand-dark text-warm-ivory px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+              >
+                Confirm & save sample
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => {
+                if (newSampleText.trim() && !pendingAnalysis) {
+                  confirmAddSample();
+                } else {
+                  setAddingSample(false);
+                  setNewSampleText("");
+                  setPendingAnalysis(null);
+                }
+              }}
+              className="text-sm text-warm-olive/50 hover:text-warm-olive/90 transition-colors"
+            >
+              {newSampleText.trim() && !pendingAnalysis ? "Skip analysis & save" : "Cancel"}
+            </button>
+          </div>
+        </div>
+      ) : (
+        samples.length > 0 && (
+          <button
+            type="button"
+            onClick={() => setAddingSample(true)}
+            className="w-full border border-dashed border-warm-taupe hover:border-warm-olive/40 text-warm-olive/50 hover:text-warm-olive/90 rounded-xl py-3 text-sm transition-colors"
+          >
+            + Add another sample
+          </button>
+        )
+      )}
+    </div>
+  );
+
+  const rulesTab = (
+    <div className="space-y-4">
+      <SectionCard
+        title="Standing Decisions"
+        hint="Standing rules we follow automatically — no need to repeat them each time."
+      >
+        <div className="space-y-2 mb-3">
+          {decisions.length === 0 && (
+            <p className="text-xs text-warm-olive/50">No decisions yet.</p>
+          )}
+          {decisions.map((d, i) => (
+            <div
+              key={i}
+              className="flex items-start gap-2 bg-warm-cream rounded-lg px-3 py-2.5 text-sm"
+            >
+              <span className="flex-1 text-warm-olive leading-relaxed">{d.detail}</span>
+              <button
+                type="button"
+                onClick={() => setDecisions((prev) => prev.filter((_, j) => j !== i))}
+                className="text-warm-olive/50 hover:text-red-400 transition-colors flex-shrink-0"
+              >
+                ×
+              </button>
+            </div>
+          ))}
+        </div>
+        <div className="flex gap-2">
+          <input
+            value={newDecision}
+            onChange={(e) => setNewDecision(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                const note = newDecision.trim();
+                if (note) {
+                  setDecisions((prev) => [
+                    ...prev,
+                    { topic: "Manual", detail: note, recorded_at: new Date().toISOString() },
+                  ]);
+                  setNewDecision("");
+                }
+              }
+            }}
+            placeholder="Add a standing decision…"
+            className="flex-1 bg-warm-cream border border-warm-taupe rounded-lg px-3 py-2 text-sm text-warm-olive placeholder-warm-olive/40 focus:outline-none focus:border-warm-olive transition-colors"
+          />
+          <button
+            type="button"
+            onClick={() => {
+              const note = newDecision.trim();
+              if (note) {
+                setDecisions((prev) => [
+                  ...prev,
+                  { topic: "Manual", detail: note, recorded_at: new Date().toISOString() },
+                ]);
+                setNewDecision("");
+              }
+            }}
+            className="px-3 py-2 text-sm bg-warm-taupe/50 hover:bg-warm-taupe text-warm-olive rounded-lg transition-colors"
+          >
+            Add
+          </button>
+        </div>
+      </SectionCard>
+
+      <SectionCard
+        title="Rejected Work"
+        hint="Why it was rejected matters more than the rejected text alone."
+      >
+        <div className="space-y-2 mb-3">
+          {rejections.length === 0 && (
+            <p className="text-xs text-warm-olive/50">No rejections recorded.</p>
+          )}
+          {rejections.map((r, i) => (
+            <div
+              key={i}
+              className="bg-warm-cream rounded-lg px-3 py-2.5 text-sm flex gap-2 items-start"
+            >
+              <div className="flex-1 min-w-0">
+                <p className="text-warm-olive/60 text-xs line-clamp-2 mb-1">{r.sample}</p>
+                <p className="text-red-400 text-xs">↳ {r.reason}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setRejections((prev) => prev.filter((_, j) => j !== i))}
+                className="text-warm-olive/50 hover:text-red-400 transition-colors flex-shrink-0"
+              >
+                ×
+              </button>
+            </div>
+          ))}
+        </div>
+        <div className="space-y-2">
+          <textarea
+            value={newRejectionSample}
+            onChange={(e) => setNewRejectionSample(e.target.value)}
+            rows={2}
+            placeholder="Paste rejected copy…"
+            className="w-full bg-warm-cream border border-warm-taupe rounded-lg px-3 py-2 text-sm text-warm-olive placeholder-warm-olive/40 focus:outline-none focus:border-warm-olive transition-colors resize-none"
+          />
+          <div className="flex gap-2">
+            <input
+              value={newRejectionReason}
+              onChange={(e) => setNewRejectionReason(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  if (newRejectionSample.trim() && newRejectionReason.trim()) {
+                    setRejections((prev) => [
+                      ...prev,
+                      { sample: newRejectionSample.trim(), reason: newRejectionReason.trim() },
+                    ]);
+                    setNewRejectionSample("");
+                    setNewRejectionReason("");
+                  }
+                }
+              }}
+              placeholder="Why was it rejected? (one sentence)"
+              className="flex-1 bg-warm-cream border border-warm-taupe rounded-lg px-3 py-2 text-sm text-warm-olive placeholder-warm-olive/40 focus:outline-none focus:border-warm-olive transition-colors"
+            />
+            <button
+              type="button"
+              onClick={() => {
+                if (newRejectionSample.trim() && newRejectionReason.trim()) {
+                  setRejections((prev) => [
+                    ...prev,
+                    { sample: newRejectionSample.trim(), reason: newRejectionReason.trim() },
+                  ]);
+                  setNewRejectionSample("");
+                  setNewRejectionReason("");
+                }
+              }}
+              className="px-3 py-2 text-sm bg-warm-taupe/50 hover:bg-warm-taupe text-warm-olive rounded-lg transition-colors"
+            >
+              Add
+            </button>
+          </div>
+        </div>
+      </SectionCard>
+    </div>
+  );
+
+  return (
+    <div className="space-y-0">
+      {/* Tab bar */}
+      <div className="flex gap-1 bg-white/90 border border-warm-taupe rounded-xl p-1 mb-5">
+        {TABS.map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            onClick={() => setActiveTab(t.id)}
+            className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${
+              activeTab === t.id
+                ? "bg-warm-olive text-warm-ivory"
+                : "text-warm-olive/60 hover:text-warm-olive"
+            }`}
+          >
+            {t.label}
+            {t.id === "samples" && samples.length > 0 && (
+              <span className="ml-1.5 text-xs text-warm-olive/50">
+                {samples.length}
+              </span>
+            )}
+          </button>
+        ))}
+      </div>
+
+      {/* Tab content */}
+      <div className="min-h-[300px]">
+        {activeTab === "voice" && voiceTab}
+        {activeTab === "samples" && samplesTab}
+        {activeTab === "rules" && rulesTab}
+      </div>
+
+      <div className="mt-6 bg-white/90 border border-warm-taupe rounded-xl overflow-hidden">
+        <div className="flex items-center justify-between px-4 py-2.5 border-b border-warm-taupe">
+          <span className="text-xs font-medium text-warm-olive/60">
+            Context size
+          </span>
+          <span
+            className={`text-xs font-mono ${
+              contextPreview.length >= CONTEXT_CHAR_WARN
+                ? "text-amber-600"
+                : "text-warm-olive/50"
+            }`}
+          >
+            {contextPreview.length}/{CONTEXT_CHAR_MAX}
+          </span>
+        </div>
+        <pre className="text-xs text-warm-olive/60 font-mono whitespace-pre-wrap leading-relaxed p-4 max-h-36 overflow-y-auto scrollbar-thin">
+          {contextPreview || "(add client details above to preview context)"}
+        </pre>
+      </div>
+
+      {showPdfUpgrade && (
+        <div className="mt-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 flex items-center justify-between gap-4">
+          <p className="text-sm text-amber-900">
+            PDF export is available on Pro and Agency plans.
+          </p>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <Link
+              href="/pricing"
+              className="bg-amber-500 hover:bg-amber-400 text-warm-olive px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors"
+            >
+              Upgrade →
+            </Link>
+            <button
+              type="button"
+              onClick={() => setShowPdfUpgrade(false)}
+              className="text-amber-700 hover:text-amber-900 text-sm"
+            >
+              ×
+            </button>
+          </div>
+        </div>
+      )}
+
+      {errorMsg && (
+        <p className="text-red-800 text-xs bg-red-50 border border-red-200 rounded-lg px-3 py-2 mt-3">
+          {errorMsg}
+        </p>
+      )}
+
+      {/* Save / delete row */}
+      <div className="flex items-center justify-between pt-4 gap-3 flex-wrap">
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            disabled={isDeleting}
+            onClick={() => {
+              if (
+                confirm(
+                  "Delete this client and all their memory? This cannot be undone."
+                )
+              ) {
+                startDeleteTransition(async () => {
+                  const result = await deleteClient(clientId);
+                  if (result?.error) {
+                    setErrorMsg(result.error);
+                  }
+                });
+              }
+            }}
+            className="text-xs text-warm-olive/50 hover:text-red-400 transition-colors disabled:opacity-50"
+          >
+            {isDeleting ? "Deleting…" : "Delete client"}
+          </button>
+          <button
+            type="button"
+            onClick={handleExportPdf}
+            className="text-xs text-warm-olive/60 hover:text-warm-olive border border-warm-taupe hover:border-warm-olive/40 px-3 py-1.5 rounded-lg transition-colors"
+          >
+            Export PDF
+          </button>
+        </div>
+
+        <div className="flex items-center gap-3">
+          {isDirty && (
+            <span className="text-xs text-amber-700">Unsaved changes</span>
+          )}
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={isSaving || isSavingMeta || !isDirty}
+            className="bg-warm-olive hover:bg-brand-dark disabled:opacity-50 text-warm-ivory px-6 py-2.5 rounded-lg text-sm font-medium transition-colors"
+          >
+            {isSaving
+              ? "Saving…"
+              : saveStatus === "saved"
+              ? "Saved ✓"
+              : "Save memory"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}

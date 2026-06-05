@@ -1,7 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
+import { Button, ConfirmSheet, Meter, Toast } from "@/components/ui";
+import { useTabIndicator } from "@/components/ui/hooks";
+import { useToast } from "@/components/ui/Toast";
 import { buildClientContext } from "@/lib/buildClientContext";
 import { exportMemoryPdf } from "@/lib/exportMemoryPdf";
 import {
@@ -9,7 +12,7 @@ import {
   CONTEXT_CHAR_WARN,
 } from "@/lib/memoryConstants";
 import { MIN_SAMPLE_CHARS } from "@/lib/sampleConstants";
-import { saveClientMeta, saveMemory, deleteClient } from "./actions";
+import { saveClientMeta, saveMemory, deleteClient } from "../actions";
 import type {
   AnalysisResult,
   ClientMemory,
@@ -24,21 +27,25 @@ import type {
 
 // ── shared primitives ─────────────────────────────────────────────────────────
 
+export interface VoiceEditorState {
+  name: string;
+  industry: string;
+  brandVoice: string;
+  toneRules: string[];
+  vocabUse: string[];
+  vocabAvoid: string[];
+  sentenceStyle: SentenceStyle;
+  samplesCount: number;
+}
+
 interface Props {
   clientId: string;
   clientName: string;
   clientIndustry: string;
   memory: ClientMemory | null;
   userPlan: Plan;
+  onStateChange?: (state: VoiceEditorState) => void;
 }
-
-type Tab = "voice" | "samples" | "rules";
-
-const TABS: { id: Tab; label: string }[] = [
-  { id: "voice", label: "Voice" },
-  { id: "samples", label: "Samples" },
-  { id: "rules", label: "Rules" },
-];
 
 function buildSnapshot(data: {
   name: string;
@@ -61,7 +68,7 @@ function TagInput({
   tags,
   onChange,
   placeholder,
-  colorClass = "bg-warm-taupe/50 text-warm-olive",
+  colorClass = "bg-raised text-text-primary",
 }: {
   tags: string[];
   onChange: (t: string[]) => void;
@@ -80,7 +87,7 @@ function TagInput({
         {tags.map((tag) => (
           <span
             key={tag}
-            className={`inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full ${colorClass}`}
+            className={`inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-pill ${colorClass}`}
           >
             {tag}
             <button
@@ -104,12 +111,12 @@ function TagInput({
             }
           }}
           placeholder={placeholder}
-          className="flex-1 bg-warm-cream border border-warm-taupe rounded-lg px-3 py-2 text-sm text-warm-olive placeholder-warm-olive/40 focus:outline-none focus:border-warm-olive transition-colors"
+          className="flex-1 bg-page border border-border rounded-md px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20 transition-colors"
         />
         <button
           type="button"
           onClick={add}
-          className="px-3 py-2 text-sm bg-warm-taupe/50 hover:bg-warm-taupe text-warm-olive rounded-lg transition-colors"
+          className="bg-raised hover:bg-border text-text-primary text-sm px-3 py-2 rounded-md transition-colors"
         >
           Add
         </button>
@@ -128,10 +135,10 @@ function SectionCard({
   children: React.ReactNode;
 }) {
   return (
-    <div className="border border-warm-taupe rounded-xl p-5">
+    <div className="bg-card border border-border rounded-[10px] p-5">
       <div className="mb-3">
         <h3 className="font-medium text-sm">{title}</h3>
-        {hint && <p className="text-xs text-warm-olive/50 mt-0.5">{hint}</p>}
+        {hint && <p className="text-xs text-text-muted mt-0.5">{hint}</p>}
       </div>
       {children}
     </div>
@@ -155,7 +162,7 @@ function Textarea({
       onChange={(e) => onChange(e.target.value)}
       placeholder={placeholder}
       rows={rows}
-      className="w-full bg-warm-cream border border-warm-taupe rounded-lg px-3 py-2.5 text-sm text-warm-olive placeholder-warm-olive/40 focus:outline-none focus:border-warm-olive transition-colors resize-none leading-relaxed"
+      className="w-full bg-page border border-border rounded-md px-3 py-2.5 text-sm text-text-primary placeholder:text-text-muted focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20 resize-none leading-relaxed transition-colors"
     />
   );
 }
@@ -176,17 +183,17 @@ function Toggle({
         role="switch"
         aria-checked={!!value}
         onClick={() => onChange(!value)}
-        className={`relative w-9 h-5 rounded-full transition-colors flex-shrink-0 ${
-          value ? "bg-warm-olive" : "bg-warm-taupe/50"
+        className={`relative w-9 h-5 rounded-pill transition-colors flex-shrink-0 ${
+          value ? "bg-accent" : "bg-raised"
         }`}
       >
         <span
-          className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform ${
+          className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-pill bg-card transition-transform ${
             value ? "translate-x-4" : "translate-x-0"
           }`}
         />
       </button>
-      <span className="text-sm text-warm-olive/90 group-hover:text-warm-olive transition-colors">
+      <span className="text-sm text-text-primary group-hover:text-text-primary transition-colors">
         {label}
       </span>
     </label>
@@ -201,8 +208,13 @@ export default function MemoryEditor({
   clientIndustry,
   memory,
   userPlan,
+  onStateChange,
 }: Props) {
-  const [activeTab, setActiveTab] = useState<Tab>("voice");
+  type ActiveTab = "voice" | "samples" | "rules";
+  const SECTION_IDS: ActiveTab[] = ["voice", "samples", "rules"];
+  const [activeTab, setActiveTab] = useState<ActiveTab>("voice");
+  const tabsRef = useRef<HTMLDivElement>(null);
+  const indicator = useTabIndicator(SECTION_IDS.indexOf(activeTab), tabsRef);
 
   const [name, setName] = useState(clientName);
   const [industry, setIndustry] = useState(clientIndustry);
@@ -239,9 +251,10 @@ export default function MemoryEditor({
   const [isSaving, startSaveTransition] = useTransition();
   const [isSavingMeta, startMetaTransition] = useTransition();
   const [isDeleting, startDeleteTransition] = useTransition();
-  const [saveStatus, setSaveStatus] = useState<"idle" | "saved" | "error">("idle");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [showPdfUpgrade, setShowPdfUpgrade] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const { toasts, addToast, removeToast } = useToast();
 
   const [savedSnapshot, setSavedSnapshot] = useState(() =>
     buildSnapshot({
@@ -265,12 +278,6 @@ export default function MemoryEditor({
   const newSampleTrimmed = newSampleText.trim();
   const newSampleTooShort =
     newSampleTrimmed.length > 0 && newSampleTrimmed.length < MIN_SAMPLE_CHARS;
-
-  useEffect(() => {
-    if (saveStatus !== "saved") return;
-    const t = setTimeout(() => setSaveStatus("idle"), 2000);
-    return () => clearTimeout(t);
-  }, [saveStatus]);
 
   const currentSnapshot = useMemo(
     () =>
@@ -339,34 +346,17 @@ export default function MemoryEditor({
   );
 
   useEffect(() => {
-    if (!isDirty) return;
-    const onBeforeUnload = (e: BeforeUnloadEvent) => {
-      e.preventDefault();
-      e.returnValue = "";
-    };
-    window.addEventListener("beforeunload", onBeforeUnload);
-    return () => window.removeEventListener("beforeunload", onBeforeUnload);
-  }, [isDirty]);
-
-  useEffect(() => {
-    if (!isDirty) return;
-    const onClick = (e: MouseEvent) => {
-      const anchor = (e.target as HTMLElement).closest("a");
-      if (!anchor || anchor.target === "_blank") return;
-      const href = anchor.getAttribute("href");
-      if (!href || href.startsWith("#")) return;
-      if (
-        !window.confirm(
-          "You have unsaved memory changes. Leave without saving?"
-        )
-      ) {
-        e.preventDefault();
-        e.stopPropagation();
-      }
-    };
-    document.addEventListener("click", onClick, true);
-    return () => document.removeEventListener("click", onClick, true);
-  }, [isDirty]);
+    onStateChange?.({
+      name,
+      industry,
+      brandVoice,
+      toneRules,
+      vocabUse,
+      vocabAvoid,
+      sentenceStyle,
+      samplesCount: samples.length,
+    });
+  }, [onStateChange, name, industry, brandVoice, toneRules, vocabUse, vocabAvoid, sentenceStyle, samples]);
 
   // ── helpers ───────────────────────────────────────────────────────────────
 
@@ -422,10 +412,10 @@ export default function MemoryEditor({
       });
       if (result.error) {
         setErrorMsg(result.error);
-        setSaveStatus("error");
+        addToast(result.error ?? "Save failed", "danger");
       } else {
         setSavedSnapshot(currentSnapshot);
-        setSaveStatus("saved");
+        addToast("Memory saved", "success");
         setErrorMsg(null);
       }
     });
@@ -498,7 +488,6 @@ export default function MemoryEditor({
     setNewSampleType("email");
     setPendingAnalysis(null);
     setAddingSample(false);
-    setActiveTab("voice");
   }
 
   // ── tab content ──────────────────────────────────────────────────────────
@@ -514,22 +503,22 @@ export default function MemoryEditor({
       <SectionCard title="Client Info">
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="block text-xs text-warm-olive/60 mb-1.5">Name</label>
+            <label className="block text-xs text-text-muted mb-1.5">Name</label>
             <input
               value={name}
               onChange={(e) => setName(e.target.value)}
               onBlur={handleMetaSave}
-              className="w-full bg-warm-cream border border-warm-taupe rounded-lg px-3 py-2 text-sm text-warm-olive focus:outline-none focus:border-warm-olive transition-colors"
+              className="w-full bg-page border border-border rounded-md px-3 py-2 text-sm text-text-primary focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20 transition-colors"
             />
           </div>
           <div>
-            <label className="block text-xs text-warm-olive/60 mb-1.5">Industry</label>
+            <label className="block text-xs text-text-muted mb-1.5">Industry</label>
             <input
               value={industry}
               onChange={(e) => setIndustry(e.target.value)}
               onBlur={handleMetaSave}
               placeholder="e.g. SaaS, fintech…"
-              className="w-full bg-warm-cream border border-warm-taupe rounded-lg px-3 py-2 text-sm text-warm-olive placeholder-warm-olive/40 focus:outline-none focus:border-warm-olive transition-colors"
+              className="w-full bg-page border border-border rounded-md px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20 transition-colors"
             />
           </div>
         </div>
@@ -567,7 +556,7 @@ export default function MemoryEditor({
           tags={toneRules}
           onChange={setToneRules}
           placeholder='e.g. Never use exclamation points, Always lead with a stat'
-          colorClass="bg-warm-taupe/40 text-warm-olive"
+          colorClass="bg-raised text-text-primary"
         />
       </SectionCard>
 
@@ -579,7 +568,7 @@ export default function MemoryEditor({
           tags={vocabUse}
           onChange={setVocabUse}
           placeholder="e.g. no-brainer, let's be honest, quietly"
-          colorClass="bg-warm-cream text-warm-olive"
+          colorClass="bg-raised text-text-primary"
         />
       </SectionCard>
 
@@ -591,7 +580,7 @@ export default function MemoryEditor({
           tags={vocabAvoid}
           onChange={setVocabAvoid}
           placeholder="e.g. synergy, leverage, game-changer"
-          colorClass="bg-red-100 text-red-800"
+          colorClass="bg-danger/15 text-danger"
         />
       </SectionCard>
 
@@ -612,8 +601,8 @@ export default function MemoryEditor({
                 }
                 className={`py-2 rounded-lg text-sm capitalize transition-colors ${
                   sentenceStyle.avg_length === len
-                    ? "bg-warm-olive text-warm-ivory"
-                    : "bg-warm-cream text-warm-olive/60 hover:text-warm-olive"
+                    ? "bg-accent text-text-primary"
+                    : "bg-raised text-text-muted hover:text-text-primary"
                 }`}
               >
                 {len} sentences
@@ -675,8 +664,8 @@ export default function MemoryEditor({
                 }
                 className={`py-2 rounded-lg text-sm capitalize transition-colors ${
                   structure.paragraph_length === len
-                    ? "bg-warm-olive text-warm-ivory"
-                    : "bg-warm-cream text-warm-olive/60 hover:text-warm-olive"
+                    ? "bg-accent text-text-primary"
+                    : "bg-raised text-text-muted hover:text-text-primary"
                 }`}
               >
                 {len} paragraphs
@@ -684,23 +673,23 @@ export default function MemoryEditor({
             ))}
           </div>
           <div>
-            <label className="block text-xs text-warm-olive/60 mb-1.5">
+            <label className="block text-xs text-text-muted mb-1.5">
               Email sign-off
             </label>
             <input
               value={structure.email_signoff ?? ""}
               onChange={(e) => patchStructure({ email_signoff: e.target.value })}
               placeholder="e.g. Warmly, / Talk soon, / — Jacob"
-              className="w-full bg-warm-cream border border-warm-taupe rounded-lg px-3 py-2 text-sm text-warm-olive placeholder-warm-olive/40 focus:outline-none focus:border-warm-olive transition-colors"
+              className="w-full bg-page border border-border rounded-md px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20 transition-colors"
             />
           </div>
           <div>
-            <label className="block text-xs text-warm-olive/60 mb-1.5">CTA style</label>
+            <label className="block text-xs text-text-muted mb-1.5">CTA style</label>
             <input
               value={structure.cta_style ?? ""}
               onChange={(e) => patchStructure({ cta_style: e.target.value })}
               placeholder="e.g. End with a question / Single imperative button"
-              className="w-full bg-warm-cream border border-warm-taupe rounded-lg px-3 py-2 text-sm text-warm-olive placeholder-warm-olive/40 focus:outline-none focus:border-warm-olive transition-colors"
+              className="w-full bg-page border border-border rounded-md px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20 transition-colors"
             />
           </div>
         </div>
@@ -711,30 +700,26 @@ export default function MemoryEditor({
   const samplesTab = (
     <div className="space-y-4">
       {samples.length === 0 && !addingSample && (
-        <div className="text-center py-16 border border-dashed border-warm-taupe rounded-xl">
-          <p className="text-warm-olive/50 text-sm mb-3">
+        <div className="text-center py-16 border border-dashed border-border rounded-[10px]">
+          <p className="text-text-muted text-sm mb-3">
             No samples yet. Samples are the highest-weight signal in the context.
           </p>
-          <button
-            type="button"
-            onClick={() => setAddingSample(true)}
-            className="bg-warm-olive hover:bg-brand-dark text-warm-ivory px-4 py-2 rounded-lg text-sm font-medium transition-colors"
-          >
+          <Button variant="secondary" onClick={() => setAddingSample(true)}>
             Add first sample
-          </button>
+          </Button>
         </div>
       )}
 
       {samples.map((s, i) => (
-        <div key={i} className="border border-warm-taupe rounded-xl p-4">
+        <div key={i} className="border border-border rounded-[10px] p-4">
           <div className="flex items-center justify-between mb-2">
             <span
-              className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+              className={`text-xs px-2 py-0.5 rounded-pill font-medium ${
                 s.type === "email"
-                  ? "bg-blue-900/40 text-blue-300"
+                  ? "bg-accent/15 text-accent"
                   : s.type === "social"
-                  ? "bg-purple-900/40 text-purple-300"
-                  : "bg-amber-900/40 text-amber-300"
+                  ? "bg-raised text-text-muted"
+                  : "bg-warn/15 text-warn"
               }`}
             >
               {s.type}
@@ -742,19 +727,35 @@ export default function MemoryEditor({
             <button
               type="button"
               onClick={() => setSamples((prev) => prev.filter((_, j) => j !== i))}
-              className="text-warm-olive/50 hover:text-red-400 text-sm transition-colors"
+              className="text-text-muted hover:text-danger text-sm transition-colors"
             >
               Remove
             </button>
           </div>
-          <p className="text-sm text-warm-olive/60 leading-relaxed line-clamp-4">
+          <p className="text-sm text-text-muted leading-relaxed line-clamp-4">
             {s.text}
           </p>
         </div>
       ))}
 
       {addingSample ? (
-        <div className="border border-warm-taupe rounded-xl p-5 space-y-4">
+        <div className="border border-border rounded-[10px] p-5 space-y-4">
+          {/* Keyframes for scan sweep + chip entrance */}
+          <style>{`
+            @keyframes scanLine {
+              0%   { transform: translateY(0); opacity: 1; }
+              88%  { opacity: 1; }
+              100% { transform: translateY(260px); opacity: 0; }
+            }
+            @keyframes chipIn {
+              from { opacity: 0; transform: translateY(8px) scale(.96); }
+              to   { opacity: 1; transform: translateY(0)   scale(1);   }
+            }
+            @media (prefers-reduced-motion: reduce) {
+              .me-scan-line { display: none !important; }
+            }
+          `}</style>
+
           <p className="text-sm font-medium">New sample</p>
           <div className="flex gap-2">
             {SAMPLE_TYPES.map((o) => (
@@ -764,79 +765,96 @@ export default function MemoryEditor({
                 onClick={() => setNewSampleType(o.value)}
                 className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
                   newSampleType === o.value
-                    ? "bg-warm-olive text-warm-ivory"
-                    : "bg-warm-cream text-warm-olive/60 hover:text-warm-olive"
+                    ? "bg-accent text-text-primary"
+                    : "bg-raised text-text-muted hover:text-text-primary"
                 }`}
               >
                 {o.label}
               </button>
             ))}
           </div>
-          <textarea
-            value={newSampleText}
-            onChange={(e) => setNewSampleText(e.target.value)}
-            rows={7}
-            placeholder="Paste their copy here…"
-            className="w-full bg-warm-cream border border-warm-taupe rounded-lg px-3 py-2.5 text-sm text-warm-olive placeholder-warm-olive/40 focus:outline-none focus:border-warm-olive transition-colors resize-none leading-relaxed"
-          />
+
+          {/* Textarea + scan-line overlay */}
+          <div className="relative overflow-hidden rounded-lg">
+            <textarea
+              value={newSampleText}
+              onChange={(e) => setNewSampleText(e.target.value)}
+              rows={7}
+              placeholder="Paste their copy here…"
+              disabled={isAnalyzing}
+              className={`w-full bg-page border border-border rounded-md px-3 py-2.5 text-sm text-text-primary placeholder:text-text-muted focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20 transition-colors resize-none leading-relaxed${isAnalyzing ? " opacity-50 pointer-events-none" : ""}`}
+            />
+            {isAnalyzing && (
+              <span
+                aria-hidden="true"
+                className="me-scan-line pointer-events-none absolute inset-x-0 top-0 h-0.5 bg-accent"
+                style={{ animation: "scanLine 1.1s linear infinite" }}
+              />
+            )}
+          </div>
 
           {newSampleTooShort && (
-            <p className="text-xs text-amber-800">
+            <p className="text-xs text-warn">
               Paste at least {MIN_SAMPLE_CHARS} characters to analyze patterns.
             </p>
           )}
 
           {pendingAnalysis && (
-            <div className="bg-white/90 border border-warm-taupe rounded-xl p-4 space-y-2">
-              <p className="text-xs font-medium text-warm-olive/60">
+            <div className="bg-card/90 border border-border rounded-[10px] p-4 space-y-2">
+              <p className="text-xs font-medium text-text-muted">
                 Detected — will be merged into Voice tab:
               </p>
               <div className="flex flex-wrap gap-1.5">
-                {pendingAnalysis.sentence_style.avg_length && (
-                  <span className="text-xs bg-warm-cream text-warm-olive/90 px-2 py-0.5 rounded-full">
-                    sentences: {pendingAnalysis.sentence_style.avg_length}
-                  </span>
-                )}
-                {pendingAnalysis.vocab_use.map((v) => (
+                {[
+                  ...(pendingAnalysis.sentence_style.avg_length
+                    ? [
+                        {
+                          key: "avg-length",
+                          className:
+                            "text-xs bg-raised text-text-primary px-2 py-0.5 rounded-pill",
+                          label: `sentences: ${pendingAnalysis.sentence_style.avg_length}`,
+                        },
+                      ]
+                    : []),
+                  ...pendingAnalysis.vocab_use.map((v) => ({
+                    key: `use-${v}`,
+                    className:
+                      "text-xs bg-raised text-text-primary px-2 py-0.5 rounded",
+                    label: v,
+                  })),
+                  ...pendingAnalysis.vocab_avoid.map((v) => ({
+                    key: `avoid-${v}`,
+                    className: "text-xs bg-danger/15 text-danger px-2 py-0.5 rounded",
+                    label: `✗ ${v}`,
+                  })),
+                ].map((chip, i) => (
                   <span
-                    key={v}
-                    className="text-xs bg-warm-cream text-warm-olive px-2 py-0.5 rounded"
+                    key={chip.key}
+                    className="inline-block"
+                    style={{
+                      animation: `chipIn var(--dur-base) var(--ease-spring) ${i * 60}ms both`,
+                    }}
                   >
-                    {v}
-                  </span>
-                ))}
-                {pendingAnalysis.vocab_avoid.map((v) => (
-                  <span
-                    key={v}
-                    className="text-xs bg-red-100 text-red-800 px-2 py-0.5 rounded"
-                  >
-                    ✗ {v}
+                    <span className={chip.className}>{chip.label}</span>
                   </span>
                 ))}
               </div>
             </div>
           )}
 
-          <div className="flex gap-3">
+          <div className="flex gap-3 items-center">
             {!pendingAnalysis ? (
-              <button
-                type="button"
+              <Button
+                variant="secondary"
                 onClick={handleAnalyzeSample}
-                disabled={
-                  isAnalyzing || !newSampleTrimmed || newSampleTooShort
-                }
-                className="bg-warm-olive hover:bg-brand-dark disabled:opacity-40 text-warm-ivory px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+                disabled={isAnalyzing || !newSampleTrimmed || newSampleTooShort}
               >
                 {isAnalyzing ? "Analyzing…" : "Analyze →"}
-              </button>
+              </Button>
             ) : (
-              <button
-                type="button"
-                onClick={confirmAddSample}
-                className="bg-warm-olive hover:bg-brand-dark text-warm-ivory px-4 py-2 rounded-lg text-sm font-medium transition-colors"
-              >
+              <Button variant="secondary" onClick={confirmAddSample}>
                 Confirm & save sample
-              </button>
+              </Button>
             )}
             <button
               type="button"
@@ -849,7 +867,7 @@ export default function MemoryEditor({
                   setPendingAnalysis(null);
                 }
               }}
-              className="text-sm text-warm-olive/50 hover:text-warm-olive/90 transition-colors"
+              className="text-sm text-text-muted hover:text-text-primary transition-colors"
             >
               {newSampleText.trim() && !pendingAnalysis ? "Skip analysis & save" : "Cancel"}
             </button>
@@ -857,13 +875,13 @@ export default function MemoryEditor({
         </div>
       ) : (
         samples.length > 0 && (
-          <button
-            type="button"
+          <Button
+            variant="secondary"
             onClick={() => setAddingSample(true)}
-            className="w-full border border-dashed border-warm-taupe hover:border-warm-olive/40 text-warm-olive/50 hover:text-warm-olive/90 rounded-xl py-3 text-sm transition-colors"
+            className="w-full justify-center border-dashed"
           >
             + Add another sample
-          </button>
+          </Button>
         )
       )}
     </div>
@@ -877,18 +895,18 @@ export default function MemoryEditor({
       >
         <div className="space-y-2 mb-3">
           {decisions.length === 0 && (
-            <p className="text-xs text-warm-olive/50">No decisions yet.</p>
+            <p className="text-xs text-text-muted">No decisions yet.</p>
           )}
           {decisions.map((d, i) => (
             <div
               key={i}
-              className="flex items-start gap-2 bg-warm-cream rounded-lg px-3 py-2.5 text-sm"
+              className="flex items-start gap-2 bg-raised rounded-lg px-3 py-2.5 text-sm"
             >
-              <span className="flex-1 text-warm-olive leading-relaxed">{d.detail}</span>
+              <span className="flex-1 text-text-primary leading-relaxed">{d.detail}</span>
               <button
                 type="button"
                 onClick={() => setDecisions((prev) => prev.filter((_, j) => j !== i))}
-                className="text-warm-olive/50 hover:text-red-400 transition-colors flex-shrink-0"
+                className="text-text-muted hover:text-danger transition-colors flex-shrink-0"
               >
                 ×
               </button>
@@ -913,10 +931,10 @@ export default function MemoryEditor({
               }
             }}
             placeholder="Add a standing decision…"
-            className="flex-1 bg-warm-cream border border-warm-taupe rounded-lg px-3 py-2 text-sm text-warm-olive placeholder-warm-olive/40 focus:outline-none focus:border-warm-olive transition-colors"
+            className="flex-1 bg-page border border-border rounded-md px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20 transition-colors"
           />
-          <button
-            type="button"
+          <Button
+            variant="secondary"
             onClick={() => {
               const note = newDecision.trim();
               if (note) {
@@ -927,10 +945,9 @@ export default function MemoryEditor({
                 setNewDecision("");
               }
             }}
-            className="px-3 py-2 text-sm bg-warm-taupe/50 hover:bg-warm-taupe text-warm-olive rounded-lg transition-colors"
           >
             Add
-          </button>
+          </Button>
         </div>
       </SectionCard>
 
@@ -940,21 +957,21 @@ export default function MemoryEditor({
       >
         <div className="space-y-2 mb-3">
           {rejections.length === 0 && (
-            <p className="text-xs text-warm-olive/50">No rejections recorded.</p>
+            <p className="text-xs text-text-muted">No rejections recorded.</p>
           )}
           {rejections.map((r, i) => (
             <div
               key={i}
-              className="bg-warm-cream rounded-lg px-3 py-2.5 text-sm flex gap-2 items-start"
+              className="bg-raised rounded-lg px-3 py-2.5 text-sm flex gap-2 items-start"
             >
               <div className="flex-1 min-w-0">
-                <p className="text-warm-olive/60 text-xs line-clamp-2 mb-1">{r.sample}</p>
-                <p className="text-red-400 text-xs">↳ {r.reason}</p>
+                <p className="text-text-muted text-xs line-clamp-2 mb-1">{r.sample}</p>
+                <p className="text-danger text-xs">↳ {r.reason}</p>
               </div>
               <button
                 type="button"
                 onClick={() => setRejections((prev) => prev.filter((_, j) => j !== i))}
-                className="text-warm-olive/50 hover:text-red-400 transition-colors flex-shrink-0"
+                className="text-text-muted hover:text-danger transition-colors flex-shrink-0"
               >
                 ×
               </button>
@@ -967,7 +984,7 @@ export default function MemoryEditor({
             onChange={(e) => setNewRejectionSample(e.target.value)}
             rows={2}
             placeholder="Paste rejected copy…"
-            className="w-full bg-warm-cream border border-warm-taupe rounded-lg px-3 py-2 text-sm text-warm-olive placeholder-warm-olive/40 focus:outline-none focus:border-warm-olive transition-colors resize-none"
+            className="w-full bg-page border border-border rounded-md px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20 transition-colors resize-none"
           />
           <div className="flex gap-2">
             <input
@@ -987,10 +1004,10 @@ export default function MemoryEditor({
                 }
               }}
               placeholder="Why was it rejected? (one sentence)"
-              className="flex-1 bg-warm-cream border border-warm-taupe rounded-lg px-3 py-2 text-sm text-warm-olive placeholder-warm-olive/40 focus:outline-none focus:border-warm-olive transition-colors"
+              className="flex-1 bg-page border border-border rounded-md px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20 transition-colors"
             />
-            <button
-              type="button"
+            <Button
+              variant="secondary"
               onClick={() => {
                 if (newRejectionSample.trim() && newRejectionReason.trim()) {
                   setRejections((prev) => [
@@ -1001,10 +1018,9 @@ export default function MemoryEditor({
                   setNewRejectionReason("");
                 }
               }}
-              className="px-3 py-2 text-sm bg-warm-taupe/50 hover:bg-warm-taupe text-warm-olive rounded-lg transition-colors"
             >
               Add
-            </button>
+            </Button>
           </div>
         </div>
       </SectionCard>
@@ -1012,73 +1028,88 @@ export default function MemoryEditor({
   );
 
   return (
-    <div className="space-y-0">
-      {/* Tab bar */}
-      <div className="flex gap-1 bg-white/90 border border-warm-taupe rounded-xl p-1 mb-5">
-        {TABS.map((t) => (
-          <button
-            key={t.id}
-            type="button"
-            onClick={() => setActiveTab(t.id)}
-            className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${
-              activeTab === t.id
-                ? "bg-warm-olive text-warm-ivory"
-                : "text-warm-olive/60 hover:text-warm-olive"
-            }`}
-          >
-            {t.label}
-            {t.id === "samples" && samples.length > 0 && (
-              <span className="ml-1.5 text-xs text-warm-olive/50">
-                {samples.length}
-              </span>
-            )}
-          </button>
-        ))}
-      </div>
-
-      {/* Tab content */}
-      <div className="min-h-[300px]">
-        {activeTab === "voice" && voiceTab}
-        {activeTab === "samples" && samplesTab}
-        {activeTab === "rules" && rulesTab}
-      </div>
-
-      <div className="mt-6 bg-white/90 border border-warm-taupe rounded-xl overflow-hidden">
-        <div className="flex items-center justify-between px-4 py-2.5 border-b border-warm-taupe">
-          <span className="text-xs font-medium text-warm-olive/60">
-            Context size
-          </span>
-          <span
-            className={`text-xs font-mono ${
-              contextPreview.length >= CONTEXT_CHAR_WARN
-                ? "text-amber-600"
-                : "text-warm-olive/50"
-            }`}
-          >
-            {contextPreview.length}/{CONTEXT_CHAR_MAX}
-          </span>
+    <div>
+      {/* Section nav — underline tab bar */}
+      <nav className="sticky top-0 z-10 bg-transparent border-b border-border mb-6">
+        <div ref={tabsRef} className="relative flex">
+          {(
+            [
+              { id: "voice" as ActiveTab, label: "Voice" },
+              {
+                id: "samples" as ActiveTab,
+                label: samples.length > 0 ? `Samples · ${samples.length}` : "Samples",
+              },
+              { id: "rules" as ActiveTab, label: "Rules" },
+            ]
+          ).map((s) => (
+            <a
+              key={s.id}
+              href={`#${s.id}`}
+              onClick={() => setActiveTab(s.id)}
+              className={`px-4 py-3 text-sm font-medium transition-colors ${
+                activeTab === s.id
+                  ? "text-accent"
+                  : "text-text-muted hover:text-text-primary"
+              }`}
+            >
+              {s.label}
+            </a>
+          ))}
+          {/* Sliding underline indicator */}
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute bottom-0 bg-accent"
+            style={{
+              height: "1.5px",
+              left: indicator.left,
+              width: indicator.width,
+              transition: `left var(--dur-base) var(--ease-spring), width var(--dur-base) var(--ease-spring)`,
+            }}
+          />
         </div>
-        <pre className="text-xs text-warm-olive/60 font-mono whitespace-pre-wrap leading-relaxed p-4 max-h-36 overflow-y-auto scrollbar-thin">
-          {contextPreview || "(add client details above to preview context)"}
-        </pre>
-      </div>
+      </nav>
+
+      {/* Voice section */}
+      <section id="voice" className="scroll-mt-14">
+        {voiceTab}
+      </section>
+
+      <hr className="border-border/40 my-8" />
+
+      {/* Samples section */}
+      <section id="samples" className="scroll-mt-14">
+        <h2 className="text-sm font-semibold text-text-muted uppercase tracking-wide mb-4">
+          Samples
+        </h2>
+        {samplesTab}
+      </section>
+
+      <hr className="border-border/40 my-8" />
+
+      {/* Rules section */}
+      <section id="rules" className="scroll-mt-14">
+        <h2 className="text-sm font-semibold text-text-muted uppercase tracking-wide mb-4">
+          Rules
+        </h2>
+        {rulesTab}
+      </section>
 
       {showPdfUpgrade && (
-        <div className="mt-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 flex items-center justify-between gap-4">
-          <p className="text-sm text-amber-900">
+        <div className="mt-3 bg-raised border border-warn/30 rounded-[10px] px-4 py-3 flex items-center justify-between gap-4">
+          <p className="text-sm">
             PDF export is available on Pro and Agency plans.
           </p>
           <div className="flex items-center gap-2 flex-shrink-0">
             <Link
               href="/pricing"
-              className="bg-amber-500 hover:bg-amber-400 text-warm-olive px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors"
+              className="bg-accent text-[#041A12] text-xs font-semibold px-3 py-1.5 rounded-md hover:bg-accent-press transition-colors"
             >
               Upgrade →
             </Link>
             <button
               type="button"
               onClick={() => setShowPdfUpgrade(false)}
-              className="text-amber-700 hover:text-amber-900 text-sm"
+              className="text-warn hover:text-text-primary text-sm"
             >
               ×
             </button>
@@ -1087,62 +1118,101 @@ export default function MemoryEditor({
       )}
 
       {errorMsg && (
-        <p className="text-red-800 text-xs bg-red-50 border border-red-200 rounded-lg px-3 py-2 mt-3">
+        <p className="bg-danger/15 text-danger text-xs border border-border rounded-lg px-3 py-2 mt-3">
           {errorMsg}
         </p>
       )}
 
+      <div className="mt-6 space-y-3">
+        <Meter
+          value={contextPreview.length}
+          max={CONTEXT_CHAR_MAX}
+          warn={CONTEXT_CHAR_WARN}
+          label="Memory"
+        />
+        <details className="rounded-[10px] border border-border bg-card/90">
+          <summary className="cursor-pointer px-4 py-2.5 text-xs font-medium text-text-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2">
+            Preview context prompt
+          </summary>
+          <pre className="border-t border-border p-4 text-xs text-text-muted font-mono whitespace-pre-wrap leading-relaxed max-h-36 overflow-y-auto scrollbar-thin">
+            {contextPreview || "(add client details above to preview context)"}
+          </pre>
+        </details>
+      </div>
+
       {/* Save / delete row */}
       <div className="flex items-center justify-between pt-4 gap-3 flex-wrap">
         <div className="flex items-center gap-3">
-          <button
-            type="button"
+          <Button
+            variant="ghost"
             disabled={isDeleting}
-            onClick={() => {
-              if (
-                confirm(
-                  "Delete this client and all their memory? This cannot be undone."
-                )
-              ) {
-                startDeleteTransition(async () => {
-                  const result = await deleteClient(clientId);
-                  if (result?.error) {
-                    setErrorMsg(result.error);
-                  }
-                });
-              }
-            }}
-            className="text-xs text-warm-olive/50 hover:text-red-400 transition-colors disabled:opacity-50"
+            onClick={() => setShowDeleteConfirm(true)}
+            className="text-xs text-text-muted hover:text-danger"
           >
             {isDeleting ? "Deleting…" : "Delete client"}
-          </button>
-          <button
-            type="button"
+          </Button>
+          <Button
+            variant="ghost"
             onClick={handleExportPdf}
-            className="text-xs text-warm-olive/60 hover:text-warm-olive border border-warm-taupe hover:border-warm-olive/40 px-3 py-1.5 rounded-lg transition-colors"
+            className="text-xs border border-border hover:border-accent"
           >
             Export PDF
-          </button>
+          </Button>
         </div>
 
         <div className="flex items-center gap-3">
-          {isDirty && (
-            <span className="text-xs text-amber-700">Unsaved changes</span>
-          )}
-          <button
-            type="button"
+          <Button
+            variant="secondary"
             onClick={handleSave}
             disabled={isSaving || isSavingMeta || !isDirty}
-            className="bg-warm-olive hover:bg-brand-dark disabled:opacity-50 text-warm-ivory px-6 py-2.5 rounded-lg text-sm font-medium transition-colors"
           >
-            {isSaving
-              ? "Saving…"
-              : saveStatus === "saved"
-              ? "Saved ✓"
-              : "Save memory"}
-          </button>
+            {isSaving ? "Saving…" : "Save memory"}
+          </Button>
         </div>
       </div>
+
+      {/* Sticky save bar */}
+      <div
+        className={`fixed bottom-0 left-0 right-0 z-40 transition-transform duration-[var(--dur-base)] ${
+          isDirty ? "translate-y-0" : "translate-y-full"
+        } bg-card/95 backdrop-blur border-t border-border px-6 py-3 flex items-center justify-between shadow-lift`}
+      >
+        <span className="text-sm text-warn font-medium">Unsaved changes</span>
+        <div className="flex gap-3">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => window.location.reload()}
+          >
+            Discard
+          </Button>
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={handleSave}
+            disabled={isSaving}
+          >
+            {isSaving ? "Saving…" : "Save memory"}
+          </Button>
+        </div>
+      </div>
+
+      <Toast toasts={toasts} removeToast={removeToast} />
+
+      <ConfirmSheet
+        open={showDeleteConfirm}
+        title="Delete this client?"
+        description="This removes all memory and cannot be undone."
+        confirmLabel="Delete"
+        onConfirm={() => {
+          setShowDeleteConfirm(false);
+          startDeleteTransition(async () => {
+            const result = await deleteClient(clientId);
+            if (result?.error) addToast(result.error, "danger");
+          });
+        }}
+        onCancel={() => setShowDeleteConfirm(false)}
+      />
     </div>
   );
 }

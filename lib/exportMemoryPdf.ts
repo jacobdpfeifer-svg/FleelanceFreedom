@@ -74,7 +74,7 @@ export function exportMemoryPdf(args: ExportArgs): void {
 </style></head><body>${sections.join("")}</body></html>`;
 
   const win = window.open("", "_blank");
-  if (!win) return;
+  if (!win) { alert("Enable pop-ups to export the memory PDF."); return; }
   win.document.write(html);
   win.document.close();
   win.focus();

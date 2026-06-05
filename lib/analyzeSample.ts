@@ -25,21 +25,6 @@ Return ONLY this JSON, no other text:
 export async function analyzeSample(text: string): Promise<AnalysisResult> {
   const anthropic = getAnthropic();
 
-  const response = await anthropic.messages.create({
-    model: ANTHROPIC_MODEL,
-    max_tokens: 512,
-    system: "Extract writing patterns as JSON only. No prose. No markdown. No code fences.",
-    messages: [{ role: "user", content: ANALYSIS_INSTRUCTION(text.slice(0, 3000)) }],
-  });
-
-  const raw = response.content
-    .filter((b) => b.type === "text")
-    .map((b) => (b as { type: "text"; text: string }).text)
-    .join("");
-
-  // Strip any accidental markdown fences
-  const cleaned = raw.replace(/```(?:json)?/g, "").replace(/```/g, "").trim();
-
   let parsed: {
     avg_length?: string;
     uses_emdash?: boolean;
@@ -49,13 +34,37 @@ export async function analyzeSample(text: string): Promise<AnalysisResult> {
     first_person?: boolean;
     vocab_use?: unknown[];
     vocab_avoid?: unknown[];
-  };
+  } | null = null;
 
-  try {
-    parsed = JSON.parse(cleaned);
-  } catch {
-    throw new Error("We couldn't read the analysis result. Try again.");
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const retryNudge =
+      attempt === 1 ? "\n\nReturn ONLY valid minified JSON. No prose, no code fences." : "";
+    const response = await anthropic.messages.create({
+      model: ANTHROPIC_MODEL,
+      max_tokens: 512,
+      system: "Extract writing patterns as JSON only. No prose. No markdown. No code fences.",
+      messages: [{ role: "user", content: `${ANALYSIS_INSTRUCTION(text.slice(0, 3000))}${retryNudge}` }],
+    });
+
+    const raw = response.content
+      .filter((b) => b.type === "text")
+      .map((b) => (b as { type: "text"; text: string }).text)
+      .join("");
+
+    // Strip any accidental markdown fences
+    const cleaned = raw.replace(/```(?:json)?/g, "").replace(/```/g, "").trim();
+
+    try {
+      parsed = JSON.parse(cleaned);
+      break;
+    } catch {
+      if (attempt === 1) {
+        throw new Error("We couldn't read the analysis result. Try again.");
+      }
+    }
   }
+
+  if (!parsed) throw new Error("We couldn't read the analysis result. Try again.");
 
   const sentence_style: SentenceStyle = {};
   if (parsed.avg_length === "short" || parsed.avg_length === "medium" || parsed.avg_length === "long") {

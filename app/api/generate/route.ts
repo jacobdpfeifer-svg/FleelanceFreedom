@@ -4,7 +4,7 @@ import { buildClientContext } from "@/lib/buildClientContext";
 import { getTaskDirective } from "@/lib/prompt-builder";
 import { streamAnthropicSSE } from "@/lib/anthropic";
 import { upsertChatSession } from "@/lib/chatSession";
-import { checkAndApplyQuota, incrementMessageCount } from "@/lib/messageQuota";
+import { consumeMessage, refundMessage } from "@/lib/messageQuota";
 import type { ChatMessage, TaskType } from "@/lib/types";
 
 interface GenerateBody {
@@ -15,14 +15,15 @@ interface GenerateBody {
 }
 
 export const runtime = "nodejs";
+export const maxDuration = 60;
 
 export async function POST(req: NextRequest) {
   const supabase = createServerClient();
   const {
-    data: { session },
-  } = await supabase.auth.getSession();
+    data: { user },
+  } = await supabase.auth.getUser();
 
-  if (!session) {
+  if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -38,27 +39,29 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "clientId and message required" }, { status: 400 });
   }
 
-  const serviceClient = createServiceClient();
-
-  const quotaResult = await checkAndApplyQuota(
-    supabase,
-    serviceClient,
-    session.user.id
-  );
-  if ("response" in quotaResult) {
-    return quotaResult.response;
-  }
+  if (message.length > 10000)
+    return NextResponse.json({ error: "Message too long." }, { status: 422 });
+  const safeHistory = Array.isArray(history) ? history.slice(-20) : [];
 
   const { data: client, error: clientError } = await supabase
     .from("clients")
     .select("id, name, industry")
     .eq("id", clientId)
-    .eq("user_id", session.user.id)
+    .eq("user_id", user.id)
     .single();
 
   if (clientError || !client) {
     return NextResponse.json({ error: "Client not found" }, { status: 404 });
   }
+
+  const serviceClient = createServiceClient();
+  const quota = await consumeMessage(serviceClient, user.id);
+  if (!quota) return NextResponse.json({ error: "User not found" }, { status: 404 });
+  if (!quota.allowed)
+    return NextResponse.json(
+      { error: "Monthly limit reached. Upgrade to Pro for unlimited messages." },
+      { status: 429 }
+    );
 
   const { data: memory } = await supabase
     .from("client_memory")
@@ -85,7 +88,7 @@ ${getTaskDirective(resolvedTask)}
 Write as if you are ${client.name}. One wrong word breaks the illusion.`;
 
   const messages: ChatMessage[] = [
-    ...(history ?? []),
+    ...safeHistory,
     { role: "user", content: message },
   ];
 
@@ -111,7 +114,6 @@ Write as if you are ${client.name}. One wrong word breaks the illusion.`;
       throw new Error(`Failed to save chat: ${saveResult.error}`);
     }
 
-    await incrementMessageCount(serviceClient, session.user.id);
   };
 
   const stream = streamAnthropicSSE({
@@ -119,6 +121,7 @@ Write as if you are ${client.name}. One wrong word breaks the illusion.`;
     messages,
     maxTokens: 1024,
     onComplete,
+    onError: async () => { await refundMessage(serviceClient, user.id); },
   });
 
   return new Response(stream, {

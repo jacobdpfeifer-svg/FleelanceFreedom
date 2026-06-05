@@ -1,5 +1,8 @@
 "use client";
 
+import type { CSSProperties } from "react";
+import { Button } from "@/components/ui";
+import BlurText from "@/components/bits/BlurText";
 import type { StepId } from "./helpers";
 import {
   DIAGNOSE_OPTIONS,
@@ -30,6 +33,14 @@ interface Props {
   onCancelEdit: () => void;
 }
 
+/* Stagger helpers — same spring values as MemoryEditor chipIn */
+const STAGGER = 60; /* ms per item */
+function staggerStyle(i: number): CSSProperties {
+  return {
+    animation: `rvChipIn var(--dur-base) var(--ease-spring) ${i * STAGGER}ms both`,
+  };
+}
+
 export default function RevealPanel({
   clientName,
   freelancerType,
@@ -54,44 +65,80 @@ export default function RevealPanel({
 
   return (
     <div className="rv-overlay">
+      {/* Inline keyframes — suppressed by global prefers-reduced-motion guard */}
+      <style>{`
+        @keyframes rvScanLine {
+          0%   { transform: translateY(0); opacity: 1; }
+          88%  { opacity: 1; }
+          100% { transform: translateY(200px); opacity: 0; }
+        }
+        @keyframes rvChipIn {
+          from { opacity: 0; transform: translateY(8px) scale(.96); }
+          to   { opacity: 1; transform: translateY(0)   scale(1);   }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .rv-scan-line { display: none !important; }
+        }
+      `}</style>
+
       <div className="rv-panel">
         {phase === "reveal" && (
           <div className="rv-reveal">
-            <div className="rv-check">✓</div>
-            <p className="rv-name">{clientName}</p>
-            <p className="rv-sub">Voice fingerprint ready</p>
+            {/* Staggered entrance — each element stamps in 60 ms after the previous */}
+            <div className="rv-check" style={staggerStyle(0)}>✓</div>
+            <p className="rv-name" style={staggerStyle(1)}>{clientName}</p>
+            <p className="rv-sub"  style={staggerStyle(2)}>Voice fingerprint ready</p>
 
-            <div className="rv-output-box">
+            <div className="rv-output-box" style={staggerStyle(3)}>
               <p className="rv-output-label">{revealLabel}</p>
               {revealLoading ? (
-                <div className="rv-loading">
-                  <div className="rv-spinner" />
-                  <span>Generating in their voice…</span>
-                </div>
+                <>
+                  <div className="rv-loading">
+                    <div className="rv-spinner" />
+                    <span>Generating in their voice…</span>
+                  </div>
+                  {/* Scan-line sweep — same pattern as MemoryEditor analyze */}
+                  <span
+                    aria-hidden="true"
+                    className="rv-scan-line pointer-events-none absolute inset-x-0 top-0 h-0.5 bg-accent"
+                    style={{ animation: "rvScanLine 1.1s linear infinite" }}
+                  />
+                </>
               ) : revealError ? (
                 <p className="rv-error-text">{revealError}</p>
               ) : (
-                <p className="rv-output-text">&ldquo;{revealOutput}&rdquo;</p>
+                /* BlurText reveal — re-animates on each new revealOutput */
+                <div
+                  key={revealOutput.slice(0, 20)}
+                  className="rv-output-text"
+                >
+                  <BlurText
+                    text={`\u201C${revealOutput}\u201D`}
+                    delay={80}
+                    animateBy="words"
+                    direction="top"
+                    className="text-text-primary text-sm leading-relaxed"
+                  />
+                </div>
               )}
             </div>
 
-            <div className="rv-actions">
-              <button
-                type="button"
-                className="rv-btn-primary"
+            <div className="rv-actions" style={staggerStyle(4)}>
+              <Button
+                variant="primary"
                 onClick={onOpenChat}
                 disabled={revealLoading}
               >
                 Open chat →
-              </button>
-              <button
-                type="button"
-                className="rv-btn-fix"
+              </Button>
+              <Button
+                variant="ghost"
                 onClick={onSomethingOff}
                 disabled={revealLoading}
+                className="text-sm text-text-primary/70 hover:text-text-primary border border-white/10"
               >
                 Something&apos;s off
-              </button>
+              </Button>
             </div>
           </div>
         )}
@@ -106,11 +153,12 @@ export default function RevealPanel({
               Pick the closest match — we&apos;ll take you straight to the fix.
             </p>
             <div className="rv-diag-options">
-              {DIAGNOSE_OPTIONS.map((opt) => (
+              {DIAGNOSE_OPTIONS.map((opt, index) => (
                 <button
                   key={opt.stepId}
                   type="button"
-                  className="rv-diag-option"
+                  className="rv-diag-option animate-stampIn opacity-0 animation-fill-forwards"
+                  style={{ animationDelay: `${index * 80}ms` }}
                   onClick={() => onDiagnose(opt.stepId)}
                 >
                   <span className="rv-diag-label">{opt.label}</span>
@@ -146,22 +194,21 @@ export default function RevealPanel({
             />
 
             <div className="rv-edit-actions">
-              <button
-                type="button"
-                className="rv-btn-primary"
+              <Button
+                variant="primary"
                 onClick={onRegenerate}
                 disabled={!editValue.trim() || regenLoading}
               >
                 {regenLoading ? "Regenerating…" : "Save & regenerate"}
-              </button>
-              <button
-                type="button"
-                className="rv-btn-secondary"
+              </Button>
+              <Button
+                variant="ghost"
                 onClick={onCancelEdit}
                 disabled={regenLoading}
+                className="text-sm text-text-primary/60 hover:text-text-primary"
               >
                 Cancel
-              </button>
+              </Button>
             </div>
 
             {revealError && (

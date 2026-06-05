@@ -3,12 +3,9 @@
 import { redirect } from "next/navigation";
 import { createServerClient } from "@/lib/supabase/server";
 import { ensureAppUser } from "@/lib/ensureAppUser";
+import { getAppUrl } from "@/lib/stripe";
 
 type AuthResult = { error?: string; redirectTo?: string };
-
-function appUrl() {
-  return process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
-}
 
 async function finishAuth(
   supabase: ReturnType<typeof createServerClient>
@@ -69,7 +66,7 @@ export async function signUp(formData: FormData): Promise<AuthResult> {
         last_name: lastName,
         full_name: `${firstName} ${lastName}`,
       },
-      emailRedirectTo: `${appUrl()}/dashboard`,
+      emailRedirectTo: `${getAppUrl()}/dashboard`,
     },
   });
 

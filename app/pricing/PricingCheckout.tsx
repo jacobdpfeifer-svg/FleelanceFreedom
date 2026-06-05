@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { Plan } from "@/lib/types";
+import { Button } from "@/components/ui";
 
 interface Props {
   plan: "pro" | "agency";
@@ -50,7 +51,7 @@ export default function PricingCheckout({
 
   if (isCurrent) {
     return (
-      <span className="inline-block w-full text-center bg-warm-cream text-warm-olive/70 px-4 py-2.5 rounded-lg text-sm font-medium">
+      <span className="inline-block w-full text-center bg-raised text-text-muted px-4 py-2.5 rounded-lg text-sm font-medium">
         Current plan
       </span>
     );
@@ -58,7 +59,7 @@ export default function PricingCheckout({
 
   if (isDowngrade) {
     return (
-      <span className="inline-block w-full text-center text-warm-olive/50 text-xs py-2.5">
+      <span className="inline-block w-full text-center text-text-muted text-xs py-2.5">
         Manage billing in Stripe
       </span>
     );
@@ -66,20 +67,16 @@ export default function PricingCheckout({
 
   return (
     <div>
-      <button
-        type="button"
+      <Button
+        variant={highlighted ? "primary" : "secondary"}
         onClick={handleCheckout}
         disabled={loading}
-        className={`w-full px-4 py-2.5 rounded-lg text-sm font-semibold transition-colors disabled:opacity-50 ${
-          highlighted
-            ? "bg-warm-olive hover:bg-brand-dark text-warm-ivory"
-            : "bg-white border border-warm-taupe hover:border-warm-olive/40 text-warm-olive"
-        }`}
+        className="w-full justify-center"
       >
         {loading ? "Redirecting…" : label}
-      </button>
+      </Button>
       {error && (
-        <p className="text-xs text-red-600 mt-2 text-center">{error}</p>
+        <p className="text-xs text-danger mt-2 text-center">{error}</p>
       )}
     </div>
   );

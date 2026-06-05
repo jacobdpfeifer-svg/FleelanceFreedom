@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import Anthropic from "@anthropic-ai/sdk";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createServiceClient } from "@/lib/supabase/server";
+import { getAnthropic, ANTHROPIC_MODEL } from "@/lib/anthropic";
 import { buildClientContext } from "@/lib/buildClientContext";
-
-const anthropic = new Anthropic();
+import { consumeMessage, refundMessage } from "@/lib/messageQuota";
 
 type FreelancerType =
   | "copywriter"
@@ -32,9 +31,9 @@ export async function POST(req: NextRequest) {
   const supabase = createClient();
 
   const {
-    data: { session },
-  } = await supabase.auth.getSession();
-  if (!session) {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -54,7 +53,7 @@ export async function POST(req: NextRequest) {
     .from("clients")
     .select("id, name, industry, freelancer_type")
     .eq("id", clientId)
-    .eq("user_id", session.user.id)
+    .eq("user_id", user.id)
     .single();
 
   if (clientError || !client) {
@@ -80,9 +79,19 @@ export async function POST(req: NextRequest) {
     ...memory,
   });
 
+  const serviceClient = createServiceClient();
+  const quota = await consumeMessage(serviceClient, user.id);
+  if (!quota) return NextResponse.json({ output: null, error: "User not found" }, { status: 404 });
+  if (!quota.allowed)
+    return NextResponse.json(
+      { output: null, error: "Monthly limit reached. Upgrade to Pro." },
+      { status: 429 }
+    );
+
   try {
+    const anthropic = getAnthropic();
     const response = await anthropic.messages.create({
-      model: "claude-sonnet-4-6",
+      model: ANTHROPIC_MODEL,
       max_tokens: 80,
       system: `You write copy for ${client.name}. Follow every rule below exactly. Do not explain, do not add context — output only what is asked.\n\n${contextString}`,
       messages: [{ role: "user", content: seedPrompt }],
@@ -97,9 +106,10 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ output, freelancerType });
   } catch (err: unknown) {
+    await refundMessage(serviceClient, user.id);
     console.error("Reveal generation error:", err);
     return NextResponse.json(
-      { error: "Generation failed. Try regenerating." },
+      { output: null, error: "Generation failed. Try regenerating." },
       { status: 500 }
     );
   }

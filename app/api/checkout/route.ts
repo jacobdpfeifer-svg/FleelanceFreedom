@@ -9,10 +9,10 @@ export const runtime = "nodejs";
 export async function POST(req: NextRequest) {
   const supabase = createServerClient();
   const {
-    data: { session },
-  } = await supabase.auth.getSession();
+    data: { user },
+  } = await supabase.auth.getUser();
 
-  if (!session) {
+  if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -36,7 +36,7 @@ export async function POST(req: NextRequest) {
   const { data: userRow, error: userError } = await supabase
     .from("users")
     .select("email, stripe_customer_id, plan")
-    .eq("id", session.user.id)
+    .eq("id", user.id)
     .single();
 
   if (userError || !userRow) {
@@ -48,17 +48,17 @@ export async function POST(req: NextRequest) {
   let customerId = userRow.stripe_customer_id;
 
   if (!customerId) {
-    const customer = await stripe.customers.create({
-      email: userRow.email ?? session.user.email ?? undefined,
-      metadata: { userId: session.user.id },
-    });
+    const customer = await stripe.customers.create(
+      { email: userRow.email ?? user.email ?? undefined, metadata: { userId: user.id } },
+      { idempotencyKey: `customer_${user.id}` }
+    );
     customerId = customer.id;
 
     const admin = createAdminClient();
     await admin
       .from("users")
       .update({ stripe_customer_id: customerId })
-      .eq("id", session.user.id);
+      .eq("id", user.id);
   }
 
   const checkoutSession = await stripe.checkout.sessions.create({
@@ -68,12 +68,12 @@ export async function POST(req: NextRequest) {
     success_url: `${appUrl}/dashboard?checkout=success`,
     cancel_url: `${appUrl}/pricing?checkout=canceled`,
     metadata: {
-      userId: session.user.id,
+      userId: user.id,
       plan,
     },
     subscription_data: {
       metadata: {
-        userId: session.user.id,
+        userId: user.id,
         plan,
       },
     },

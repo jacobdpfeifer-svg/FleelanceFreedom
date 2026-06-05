@@ -1,106 +1,55 @@
-import { NextResponse } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Plan } from "./types";
 import { FREE_MESSAGE_LIMIT } from "./quotaConstants";
 
 export { FREE_MESSAGE_LIMIT };
 
-export interface QuotaUser {
+export interface QuotaState {
+  allowed: boolean;
   plan: Plan;
   message_count: number;
   messages_reset_at: string;
 }
 
-function computeNextReset(resetAt: Date, now: Date): Date {
-  const nextReset = new Date(resetAt);
-  while (nextReset <= now) {
-    nextReset.setMonth(nextReset.getMonth() + 1);
-  }
-  return nextReset;
-}
-
-/** Reset message_count when the monthly window has elapsed. */
-export async function applyMonthlyResetIfNeeded(
-  serviceClient: SupabaseClient,
-  userId: string,
-  user: QuotaUser
-): Promise<QuotaUser> {
-  const now = new Date();
-  const resetAt = new Date(user.messages_reset_at);
-
-  if (now >= resetAt) {
-    const nextReset = computeNextReset(resetAt, now);
-    await serviceClient
-      .from("users")
-      .update({
-        message_count: 0,
-        messages_reset_at: nextReset.toISOString(),
-      })
-      .eq("id", userId);
-    return {
-      ...user,
-      message_count: 0,
-      messages_reset_at: nextReset.toISOString(),
-    };
-  }
-
-  return user;
-}
-
-export function isFreeLimitReached(user: QuotaUser): boolean {
-  return user.plan === "free" && user.message_count >= FREE_MESSAGE_LIMIT;
-}
-
-export function quotaLimitResponse(): NextResponse {
-  return NextResponse.json(
-    { error: "Monthly limit reached. Upgrade to Pro for unlimited messages." },
-    { status: 429 }
-  );
-}
-
-/**
- * Load user quota, apply monthly reset if due, and block free users at the cap.
- * Used by /api/generate and /api/analyze-sample before any Anthropic call.
- */
-export async function checkAndApplyQuota(
-  supabase: SupabaseClient,
+/** Atomic: applies monthly reset, enforces free cap, increments. Service client only. */
+export async function consumeMessage(
   serviceClient: SupabaseClient,
   userId: string
-): Promise<{ user: QuotaUser } | { response: NextResponse }> {
-  const { data: user, error } = await supabase
-    .from("users")
-    .select("plan, message_count, messages_reset_at")
-    .eq("id", userId)
+): Promise<QuotaState | null> {
+  const { data, error } = await serviceClient
+    .rpc("consume_message", { p_user_id: userId })
     .single();
-
-  if (error || !user) {
-    return {
-      response: NextResponse.json({ error: "User not found" }, { status: 404 }),
-    };
-  }
-
-  const quotaUser = await applyMonthlyResetIfNeeded(
-    serviceClient,
-    userId,
-    user as QuotaUser
-  );
-
-  if (isFreeLimitReached(quotaUser)) {
-    return { response: quotaLimitResponse() };
-  }
-
-  return { user: quotaUser };
+  if (error || !data) return null;
+  const row = data as {
+    allowed: boolean; plan: Plan; message_count: number; messages_reset_at: string;
+  };
+  return {
+    allowed: row.allowed,
+    plan: row.plan ?? "free",
+    message_count: row.message_count ?? 0,
+    messages_reset_at: row.messages_reset_at,
+  };
 }
 
-/** Increment usage after a successful generation or analysis. */
-export async function incrementMessageCount(
+/** Undo a consume when the downstream call failed. */
+export async function refundMessage(
   serviceClient: SupabaseClient,
   userId: string
 ): Promise<void> {
-  const { error } = await serviceClient.rpc("increment_message_count", {
-    user_id: userId,
-  });
-  if (error) {
-    console.error("increment_message_count error:", error.message);
+  const { error } = await serviceClient.rpc("refund_message", { p_user_id: userId });
+  if (error) console.error("refund_message error:", error.message);
+}
+
+/** Pure, read-only quota view for display (no DB write). */
+export function effectiveQuota(user: {
+  plan: Plan; message_count: number; messages_reset_at: string;
+}): { plan: Plan; message_count: number; messages_reset_at: string } {
+  const now = new Date();
+  let reset = new Date(user.messages_reset_at);
+  let count = user.message_count;
+  if (now >= reset) {
+    while (reset <= now) reset = new Date(reset.setMonth(reset.getMonth() + 1));
+    count = 0;
   }
+  return { plan: user.plan, message_count: count, messages_reset_at: reset.toISOString() };
 }

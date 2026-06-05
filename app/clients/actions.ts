@@ -8,9 +8,9 @@ import type { Decision, Sample, Rejection, SentenceStyle, Structure } from "@/li
 export async function saveClientMeta(clientId: string, formData: FormData) {
   const supabase = createServerClient();
   const {
-    data: { session },
-  } = await supabase.auth.getSession();
-  if (!session) return { error: "Not authenticated" };
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "Not authenticated" };
 
   const name = (formData.get("name") as string)?.trim();
   const industry = (formData.get("industry") as string)?.trim() ?? null;
@@ -20,9 +20,13 @@ export async function saveClientMeta(clientId: string, formData: FormData) {
   const { error } = await supabase
     .from("clients")
     .update({ name, industry: industry || null })
-    .eq("id", clientId);
+    .eq("id", clientId)
+    .eq("user_id", user.id);
 
-  if (error) return { error: error.message };
+  if (error) {
+    console.error("save error:", error.message);
+    return { error: "Couldn't save changes. Please try again." };
+  }
   revalidatePath(`/clients/${clientId}`);
   return {};
 }
@@ -46,9 +50,17 @@ export async function saveMemory(
 ): Promise<{ error?: string }> {
   const supabase = createServerClient();
   const {
-    data: { session },
-  } = await supabase.auth.getSession();
-  if (!session) return { error: "Not authenticated" };
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "Not authenticated" };
+
+  const { data: owned } = await supabase
+    .from("clients")
+    .select("id")
+    .eq("id", clientId)
+    .eq("user_id", user.id)
+    .single();
+  if (!owned) return { error: "Client not found" };
 
   const memoryData = {
     client_id: clientId,
@@ -69,7 +81,10 @@ export async function saveMemory(
     .from("client_memory")
     .upsert(memoryData, { onConflict: "client_id" });
 
-  if (error) return { error: error.message };
+  if (error) {
+    console.error("save error:", error.message);
+    return { error: "Couldn't save changes. Please try again." };
+  }
   revalidatePath(`/clients/${clientId}`);
   return {};
 }
@@ -79,12 +94,23 @@ export async function deleteClient(
 ): Promise<{ error?: string }> {
   const supabase = createServerClient();
   const {
-    data: { session },
-  } = await supabase.auth.getSession();
-  if (!session) return { error: "Not authenticated" };
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "Not authenticated" };
+
+  const { data: owned } = await supabase
+    .from("clients")
+    .select("id")
+    .eq("id", clientId)
+    .eq("user_id", user.id)
+    .single();
+  if (!owned) return { error: "Client not found" };
 
   const { error } = await supabase.from("clients").delete().eq("id", clientId);
-  if (error) return { error: error.message };
+  if (error) {
+    console.error("save error:", error.message);
+    return { error: "Couldn't save changes. Please try again." };
+  }
 
   redirect("/dashboard");
 }

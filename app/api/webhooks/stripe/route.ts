@@ -35,6 +35,15 @@ export async function POST(req: NextRequest) {
   }
 
   const admin = createAdminClient();
+  const { error: dedupeError } = await admin
+    .from("stripe_events")
+    .insert({ id: event.id });
+  if (dedupeError) {
+    // 23505 = already processed; ack and stop.
+    if (dedupeError.code === "23505")
+      return NextResponse.json({ received: true, duplicate: true });
+    console.error("stripe_events insert error:", dedupeError.message);
+  }
 
   switch (event.type) {
     case "checkout.session.completed": {

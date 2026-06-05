@@ -11,7 +11,7 @@ export function getAnthropic(): Anthropic {
     if (!apiKey) {
       throw new Error("Copy generation isn't configured. Contact support.");
     }
-    client = new Anthropic({ apiKey });
+    client = new Anthropic({ apiKey, timeout: 60000 });
   }
   return client;
 }
@@ -27,8 +27,9 @@ export function streamAnthropicSSE(args: {
   messages: ChatMessage[];
   maxTokens?: number;
   onComplete?: (fullText: string) => Promise<void> | void;
+  onError?: () => Promise<void> | void;
 }): ReadableStream<Uint8Array> {
-  const { system, messages, maxTokens = 2048, onComplete } = args;
+  const { system, messages, maxTokens = 2048, onComplete, onError } = args;
   const encoder = new TextEncoder();
 
   return new ReadableStream<Uint8Array>({
@@ -62,6 +63,7 @@ export function streamAnthropicSSE(args: {
         controller.enqueue(encoder.encode("data: [DONE]\n\n"));
       } catch (err) {
         const message = err instanceof Error ? err.message : "Unknown error";
+        if (onError) { try { await onError(); } catch {} }
         send({ error: message });
         controller.enqueue(encoder.encode("data: [DONE]\n\n"));
       } finally {

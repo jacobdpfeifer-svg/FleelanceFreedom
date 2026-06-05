@@ -6,10 +6,18 @@ import type { Decision } from "@/lib/types";
 export async function saveDecision(clientId: string, note: string): Promise<{ error?: string }> {
   const supabase = createServerClient();
   const {
-    data: { session },
-  } = await supabase.auth.getSession();
+    data: { user },
+  } = await supabase.auth.getUser();
 
-  if (!session) return { error: "Not authenticated" };
+  if (!user) return { error: "Not authenticated" };
+
+  const { data: owned } = await supabase
+    .from("clients")
+    .select("id")
+    .eq("id", clientId)
+    .eq("user_id", user.id)
+    .single();
+  if (!owned) return { error: "Client not found" };
 
   const newDecision: Decision = {
     topic: "Session learning",
@@ -35,23 +43,21 @@ export async function saveDecision(clientId: string, note: string): Promise<{ er
       .update({ decisions, updated_at: new Date().toISOString() })
       .eq("id", existing.id);
 
-    if (error) return { error: error.message };
+    if (error) {
+      console.error("save error:", error.message);
+      return { error: "Couldn't save changes. Please try again." };
+    }
   } else {
     // Memory row doesn't exist yet — create it
-    const { data: client } = await supabase
-      .from("clients")
-      .select("id")
-      .eq("id", clientId)
-      .single();
-
-    if (!client) return { error: "Client not found" };
-
     const { error } = await supabase.from("client_memory").insert({
       client_id: clientId,
       decisions: [newDecision],
     });
 
-    if (error) return { error: error.message };
+    if (error) {
+      console.error("save error:", error.message);
+      return { error: "Couldn't save changes. Please try again." };
+    }
   }
 
   return {};

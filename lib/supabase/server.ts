@@ -1,5 +1,6 @@
 import { createServerClient as _createServerClient, type CookieOptions } from "@supabase/ssr";
 import { cookies } from "next/headers";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 /**
  * Server-side Supabase client for RSC, Server Actions, and Route Handlers.
@@ -43,27 +44,5 @@ export const createClient = createServerClient;
  * (webhooks, admin tasks). Never expose to the client.
  */
 export function createServiceClient() {
-  const cookieStore = cookies();
-
-  return _createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    {
-      cookies: {
-        get(name: string) {
-          return cookieStore.get(name)?.value;
-        },
-        set(name: string, value: string, options: CookieOptions) {
-          try {
-            cookieStore.set({ name, value, ...options });
-          } catch {}
-        },
-        remove(name: string, options: CookieOptions) {
-          try {
-            cookieStore.set({ name, value: "", ...options });
-          } catch {}
-        },
-      },
-    }
-  );
+  return createAdminClient();
 }

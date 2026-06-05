@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient, createServiceClient } from "@/lib/supabase/server";
 import { analyzeSample } from "@/lib/analyzeSample";
-import { checkAndApplyQuota, incrementMessageCount } from "@/lib/messageQuota";
+import { consumeMessage, refundMessage } from "@/lib/messageQuota";
 import { MIN_SAMPLE_CHARS } from "@/lib/sampleConstants";
 
 export const runtime = "nodejs";
@@ -9,22 +9,11 @@ export const runtime = "nodejs";
 export async function POST(req: NextRequest) {
   const supabase = createServerClient();
   const {
-    data: { session },
-  } = await supabase.auth.getSession();
+    data: { user },
+  } = await supabase.auth.getUser();
 
-  if (!session) {
+  if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  const serviceClient = createServiceClient();
-
-  const quotaResult = await checkAndApplyQuota(
-    supabase,
-    serviceClient,
-    session.user.id
-  );
-  if ("response" in quotaResult) {
-    return quotaResult.response;
   }
 
   let text: string;
@@ -42,11 +31,20 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  const serviceClient = createServiceClient();
+  const quota = await consumeMessage(serviceClient, user.id);
+  if (!quota) return NextResponse.json({ error: "User not found" }, { status: 404 });
+  if (!quota.allowed)
+    return NextResponse.json(
+      { error: "Monthly limit reached. Upgrade to Pro for unlimited messages." },
+      { status: 429 }
+    );
+
   try {
     const result = await analyzeSample(text);
-    await incrementMessageCount(serviceClient, session.user.id);
     return NextResponse.json(result);
   } catch (err) {
+    await refundMessage(serviceClient, user.id);
     const message = err instanceof Error ? err.message : "Analysis failed";
     console.error("analyze-sample error:", message);
     return NextResponse.json({ error: message }, { status: 500 });

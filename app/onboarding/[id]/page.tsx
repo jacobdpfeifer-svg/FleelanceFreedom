@@ -11,16 +11,16 @@ export default async function OnboardingPage({ params }: Props) {
   const supabase = createClient();
 
   const {
-    data: { session },
-  } = await supabase.auth.getSession();
+    data: { user },
+  } = await supabase.auth.getUser();
 
-  if (!session) redirect("/login");
+  if (!user) redirect("/login");
 
   const { data: client, error } = await supabase
     .from("clients")
     .select("id, name, freelancer_type")
     .eq("id", params.id)
-    .eq("user_id", session.user.id)
+    .eq("user_id", user.id)
     .single();
 
   if (error || !client) redirect("/dashboard");

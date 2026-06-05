@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
-import { createServerClient, createServiceClient } from "@/lib/supabase/server";
+import { createServerClient } from "@/lib/supabase/server";
 import { loadLatestChatSession } from "@/lib/chatSession";
-import { applyMonthlyResetIfNeeded } from "@/lib/messageQuota";
+import { effectiveQuota } from "@/lib/messageQuota";
 import ChatUI from "./ChatUI";
 import type { ChatMessage, Decision, Plan, TaskType } from "@/lib/types";
 
@@ -13,16 +13,16 @@ interface Props {
 export default async function ChatPage({ params, searchParams }: Props) {
   const supabase = createServerClient();
   const {
-    data: { session },
-  } = await supabase.auth.getSession();
+    data: { user },
+  } = await supabase.auth.getUser();
 
-  if (!session) redirect("/login");
+  if (!user) redirect("/login");
 
   const { data: client, error } = await supabase
     .from("clients")
     .select("id, name, industry")
     .eq("id", params.id)
-    .eq("user_id", session.user.id)
+    .eq("user_id", user.id)
     .single();
 
   if (error || !client) redirect("/dashboard");
@@ -38,25 +38,19 @@ export default async function ChatPage({ params, searchParams }: Props) {
   const { data: userRow } = await supabase
     .from("users")
     .select("plan, message_count, messages_reset_at")
-    .eq("id", session.user.id)
+    .eq("id", user.id)
     .single();
 
   let userPlan: Plan = (userRow?.plan as Plan) ?? "free";
   let messageCount = userRow?.message_count ?? 0;
 
   if (userRow) {
-    const serviceClient = createServiceClient();
-    const refreshed = await applyMonthlyResetIfNeeded(
-      serviceClient,
-      session.user.id,
-      {
-        plan: userPlan,
-        message_count: userRow.message_count,
-        messages_reset_at: userRow.messages_reset_at,
-      }
-    );
-    messageCount = refreshed.message_count;
-    userPlan = refreshed.plan;
+    const q = effectiveQuota({
+      plan: userPlan,
+      message_count: userRow.message_count,
+      messages_reset_at: userRow.messages_reset_at,
+    });
+    messageCount = q.message_count; userPlan = q.plan;
   }
 
   const taskFromUrl = searchParams.task as TaskType | undefined;
