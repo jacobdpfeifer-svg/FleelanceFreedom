@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui";
-import { saveMemory } from "@/app/clients/actions";
+import { saveMemory } from "@/app/clients/[id]/actions";
 import {
   applyAnswer,
   parseExtractions,

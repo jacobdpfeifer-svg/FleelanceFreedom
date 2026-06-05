@@ -6,21 +6,21 @@ const PUBLIC_PATHS = ["/login", "/signup", "/api/webhooks"];
 export async function middleware(request: NextRequest) {
   const { supabase, response } = createMiddlewareClient(request);
 
-  // Refresh the session so cookies stay alive
+  // getUser() verifies the JWT with the auth server; keeps cookies alive as a side-effect.
   const {
-    data: { session },
-  } = await supabase.auth.getSession();
+    data: { user },
+  } = await supabase.auth.getUser();
 
   const { pathname } = request.nextUrl;
   const isPublic = PUBLIC_PATHS.some((p) => pathname.startsWith(p));
 
-  if (!session && !isPublic) {
+  if (!user && !isPublic) {
     const loginUrl = request.nextUrl.clone();
     loginUrl.pathname = "/login";
     return NextResponse.redirect(loginUrl);
   }
 
-  if (session && (pathname === "/login" || pathname === "/signup")) {
+  if (user && (pathname === "/login" || pathname === "/signup")) {
     const dashUrl = request.nextUrl.clone();
     dashUrl.pathname = "/dashboard";
     return NextResponse.redirect(dashUrl);

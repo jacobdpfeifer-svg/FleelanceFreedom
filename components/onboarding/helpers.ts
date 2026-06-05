@@ -1,4 +1,4 @@
-import type { MemoryPayload } from "@/app/clients/actions";
+import type { MemoryPayload } from "@/app/clients/[id]/actions";
 import type { SentenceStyle } from "@/lib/types";
 
 export interface Extraction {

@@ -12,7 +12,7 @@ import {
   CONTEXT_CHAR_WARN,
 } from "@/lib/memoryConstants";
 import { MIN_SAMPLE_CHARS } from "@/lib/sampleConstants";
-import { saveClientMeta, saveMemory, deleteClient } from "../actions";
+import { saveClientMeta, saveMemory, deleteClient } from "./actions";
 import type {
   AnalysisResult,
   ClientMemory,
