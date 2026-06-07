@@ -54,7 +54,7 @@ export async function createNewClient() {
     );
   }
 
-  redirect(`/onboarding/${client.id}`);
+  redirect(`/clients/${client.id}`);
 }
 
 export async function signOut() {

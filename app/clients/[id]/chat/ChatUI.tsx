@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
-import { Button, Tabs } from "@/components/ui";
+import { Button } from "@/components/ui";
 import AnimatedContent from "@/components/bits/AnimatedContent";
 import { saveDecision } from "./actions";
 import { FREE_MESSAGE_LIMIT } from "@/lib/quotaConstants";
@@ -196,6 +196,11 @@ export default function ChatUI({
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
+  function autoGrow(el: HTMLTextAreaElement) {
+    el.style.height = "auto";
+    el.style.height = Math.min(el.scrollHeight, 160) + "px";
+  }
+
   const isFreePlan = userPlan === "free";
   const isStreamingNow = messages.some((m) => m.streaming);
 
@@ -338,7 +343,6 @@ export default function ChatUI({
         setSaveWarning(
           `Copy generated, but this exchange wasn't saved. ${streamSaveError}`
         );
-        setShowDecisionBar(true);
         return;
       }
 
@@ -351,8 +355,6 @@ export default function ChatUI({
       if (isFreePlan) {
         setMessageCount((c) => c + 1);
       }
-
-      setShowDecisionBar(true);
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Something went wrong";
       setError(msg);
@@ -471,13 +473,23 @@ export default function ChatUI({
             </div>
           </div>
 
-          <Tabs
-            variant="pill"
-            activeId={taskType}
-            onChange={(t) => setTaskType(t as TaskType)}
-            tabs={TASK_KEYS.map((t) => ({ id: t, label: TASK_LABELS[t] }))}
-            className="justify-end"
-          />
+        </div>
+
+        <div className="flex gap-2 px-4 pt-3 pb-2 overflow-x-auto flex-shrink-0 border-b border-border" style={{ scrollbarWidth: "none" }}>
+          {TASK_KEYS.map((t) => (
+            <button
+              key={t}
+              type="button"
+              onClick={() => setTaskType(t)}
+              className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors ${
+                taskType === t
+                  ? "bg-accent text-[#041A12]"
+                  : "bg-raised text-text-muted hover:text-text-primary hover:bg-card"
+              }`}
+            >
+              {TASK_LABELS[t]}
+            </button>
+          ))}
         </div>
 
         <div className="flex-1 overflow-y-auto px-4 py-6 space-y-5 scrollbar-thin">
@@ -509,7 +521,17 @@ export default function ChatUI({
                   </span>
 
                   {msg.role === "assistant" && !msg.streaming && msg.content && (
-                    <div className="mt-2 flex justify-end">
+                    <div className="mt-2 flex items-center justify-between">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowDecisionBar(true);
+                          setDecisionInput("");
+                        }}
+                        className="text-[10px] text-text-muted hover:text-text-primary transition-colors"
+                      >
+                        + decision
+                      </button>
                       <CopyButton text={msg.content} />
                     </div>
                   )}
@@ -627,13 +649,16 @@ export default function ChatUI({
             <textarea
               ref={inputRef}
               value={input}
-              onChange={(e) => setInput(e.target.value)}
+              onChange={(e) => {
+                setInput(e.target.value);
+                autoGrow(e.target);
+              }}
               onKeyDown={handleKeyDown}
               placeholder={`Write ${TASK_LABELS[taskType].toLowerCase()} for ${clientName}…`}
               rows={1}
               disabled={isStreaming || showUpgradeBanner}
-              className="flex-1 bg-transparent text-sm text-text-primary placeholder-text-muted focus:outline-none resize-none leading-relaxed disabled:opacity-50"
-              style={{ maxHeight: "120px", overflowY: "auto" }}
+              className="flex-1 bg-transparent text-sm text-text-primary placeholder-text-muted focus:outline-none leading-relaxed disabled:opacity-50"
+              style={{ height: "40px", maxHeight: "160px", overflowY: "auto", resize: "none" }}
             />
             <Button
               variant="primary"
@@ -641,7 +666,15 @@ export default function ChatUI({
               disabled={isStreaming || !input.trim() || showUpgradeBanner}
               className="rounded-[10px] flex-shrink-0"
             >
-              {isStreaming ? "…" : "Send"}
+              {isStreaming ? (
+                <span className="inline-flex gap-0.5 items-center h-4">
+                  <span className="w-1 h-1 bg-current rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
+                  <span className="w-1 h-1 bg-current rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
+                  <span className="w-1 h-1 bg-current rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
+                </span>
+              ) : (
+                "Send"
+              )}
             </Button>
           </div>
           <p className="text-center text-xs text-text-muted mt-2">

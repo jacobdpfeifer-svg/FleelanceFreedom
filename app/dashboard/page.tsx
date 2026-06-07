@@ -36,7 +36,8 @@ export default async function DashboardPage({
 
   const plan = userRow?.plan ?? "free";
   const clientList: Client[] = clients ?? [];
-  const atFreeLimit = plan === "free" && clientList.length >= 1;
+  const FREE_CLIENT_LIMIT = 1;
+  const atFreeLimit = plan === "free" && clientList.length >= FREE_CLIENT_LIMIT;
 
   return (
     <div className="min-h-screen bg-page">
@@ -49,6 +50,14 @@ export default async function DashboardPage({
         </div>
         <div className="flex items-center gap-4">
           <span className="text-[10px] font-semibold uppercase tracking-wider text-text-muted">{plan} plan</span>
+          {plan === "free" && (
+            <Link
+              href="/pricing"
+              className="text-[10px] font-semibold uppercase tracking-wider bg-accent text-[#041A12] px-2.5 py-1 rounded-md hover:bg-accent-press transition-colors whitespace-nowrap"
+            >
+              Upgrade
+            </Link>
+          )}
           <form action={signOut}>
             <Button type="submit" variant="ghost">
               Sign out
@@ -81,33 +90,16 @@ export default async function DashboardPage({
           {atFreeLimit ? (
             <Link
               href="/pricing"
-              className="bg-transparent border border-warn/30 text-warn text-xs font-semibold px-3.5 py-1.5 rounded-md hover:bg-raised transition-colors"
+              className="inline-flex items-center gap-1.5 bg-accent text-[#041A12] text-xs font-semibold px-3.5 py-2 rounded-md hover:bg-accent-press transition-colors whitespace-nowrap"
             >
-              Upgrade to add more clients
+              <span className="text-sm leading-none" aria-hidden="true">+</span>
+              Upgrade to add clients
             </Link>
           ) : (
             <NewClientButton />
           )}
         </div>
 
-        {atFreeLimit && (
-          <div className="bg-raised border border-warn/30 rounded-[10px] px-4 py-3 flex items-center justify-between gap-3 mb-5">
-            <div>
-              <p className="text-xs font-semibold text-warn">
-                Free plan limit reached
-              </p>
-              <p className="text-[11px] text-warn/70 mt-0.5">
-                Upgrade for unlimited clients, messages, and decision history.
-              </p>
-            </div>
-            <Link
-              href="/pricing"
-              className="bg-accent text-[#041A12] text-xs font-semibold px-3.5 py-1.5 rounded-md hover:bg-accent-press whitespace-nowrap transition-colors"
-            >
-              Upgrade — $9/mo
-            </Link>
-          </div>
-        )}
 
         {clientList.length === 0 ? (
           <div className="text-center py-24 border border-dashed border-border rounded-[10px] bg-card/50">
