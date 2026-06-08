@@ -41,7 +41,7 @@ export async function POST(req: NextRequest) {
     );
 
   try {
-    const result = await analyzeSample(text);
+    const result = await analyzeSample(text.slice(0, 3000));
     return NextResponse.json(result);
   } catch (err) {
     await refundMessage(serviceClient, user.id);

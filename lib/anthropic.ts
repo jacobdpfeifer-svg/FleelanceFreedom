@@ -29,7 +29,7 @@ export function streamAnthropicSSE(args: {
   onComplete?: (fullText: string) => Promise<void> | void;
   onError?: () => Promise<void> | void;
 }): ReadableStream<Uint8Array> {
-  const { system, messages, maxTokens = 2048, onComplete, onError } = args;
+  const { system, messages, maxTokens = 1024, onComplete, onError } = args;
   const encoder = new TextEncoder();
 
   return new ReadableStream<Uint8Array>({

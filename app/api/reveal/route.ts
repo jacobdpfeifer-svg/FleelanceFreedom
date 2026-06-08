@@ -70,15 +70,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ output: null }, { status: 200 });
   }
 
-  const freelancerType = (client.freelancer_type ||
-    "general") as FreelancerType;
-  const seedPrompt = SEED_PROMPTS[freelancerType] ?? SEED_PROMPTS.general;
-  const contextString = buildClientContext({
-    name: client.name,
-    industry: client.industry,
-    ...memory,
-  });
-
   const serviceClient = createServiceClient();
   const quota = await consumeMessage(serviceClient, user.id);
   if (!quota) return NextResponse.json({ output: null, error: "User not found" }, { status: 404 });
@@ -87,6 +78,15 @@ export async function POST(req: NextRequest) {
       { output: null, error: "Monthly limit reached. Upgrade to Pro." },
       { status: 429 }
     );
+
+  const freelancerType = (client.freelancer_type ||
+    "general") as FreelancerType;
+  const seedPrompt = SEED_PROMPTS[freelancerType] ?? SEED_PROMPTS.general;
+  const contextString = buildClientContext({
+    name: client.name,
+    industry: client.industry,
+    ...memory,
+  });
 
   try {
     const anthropic = getAnthropic();

@@ -27,6 +27,8 @@ function bulletList(items: string[]): string {
 }
 
 /**
+ * @deprecated Use buildClientContext from lib/buildClientContext.ts instead.
+ *
  * Builds writing instructions from a client's persistent memory. This is the
  * core product mechanic: every generation is grounded in brand voice, tone rules,
  * prior decisions, approved samples, and anti-rules so the freelancer never
