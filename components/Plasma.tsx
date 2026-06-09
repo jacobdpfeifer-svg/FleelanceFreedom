@@ -100,7 +100,7 @@ export default function Plasma({
   speed = 1,
   direction = "forward",
   scale = 1,
-  opacity = 1,
+  opacity = 0.45,
   mouseInteractive = true,
 }: PlasmaProps) {
   const containerRef = useRef<HTMLDivElement>(null);

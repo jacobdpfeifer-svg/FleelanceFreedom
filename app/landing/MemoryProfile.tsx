@@ -86,7 +86,7 @@ function Card({
 }) {
   return (
     <div
-      className={`rounded-[9px] border border-[#14271D] bg-[#081310] p-3 ${className}`}
+      className={`rounded-[9px] border border-[#14271D] bg-[#07100C] p-3 ${className}`}
       style={{
         animationName: "decIn",
         animationDuration: "240ms",
