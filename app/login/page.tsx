@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { signIn, signUp } from "./actions";
 import Threads from "@/components/bits/Threads";
@@ -93,6 +94,13 @@ export default function LoginPage() {
 
         {/* Card */}
         <div className="bg-card border border-border rounded-[10px] p-6">
+          <Link
+            href="/"
+            className="mb-5 inline-flex text-sm text-text-muted transition-colors hover:text-text-primary"
+          >
+            ← Freelance Freedom
+          </Link>
+
           {/* Tab row */}
           <div className="flex border-b border-border mb-6">
             {TABS.map((tab) => {
